@@ -2,10 +2,11 @@ import './styles/main.scss';
 
 import { TICK_RATE } from './core/constants';
 import { buyGenerator, buyUpgrade, canPrestige, click, prestige, tick } from './core/logic';
+import { debugAddCrystals, debugAddEnergy, debugForcePrestige, debugSkipToNextMilestone } from './core/debug';
 import { MILESTONES, milestonesReached } from './core/milestones';
 import { applyOfflineProgress, deserialize, serialize } from './core/save';
 import { newGame, type GameState } from './core/state';
-import { formatDistance, formatDistanceStr } from './core/units';
+import { formatDistanceStr } from './core/units';
 import { queryRefs } from './ui/dom';
 import { initialRecentLog, updateProgress } from './ui/progress';
 import { renderShop, setActiveTab, type ShopTab } from './ui/shop';
@@ -41,6 +42,9 @@ function main(): void {
   let activeTab: ShopTab = 'generators';
   let recentLog = initialRecentLog(state);
   let milestoneCount = milestonesReached(state.currencies.distanceRun);
+  // Set right before an intentional wipe so the beforeunload/autosave
+  // handlers below don't resurrect the old save on their way out.
+  let saveSuspended = false;
 
   function refreshShopAndProgress(): void {
     renderShop(state, refs, activeTab);
@@ -78,15 +82,54 @@ function main(): void {
     hideClickHint(refs);
   });
 
-  refs.prestigePanel.addEventListener('click', () => {
-    if (!canPrestige(state)) return;
-    prestige(state);
+  function onPrestiged(): void {
     recentLog = [];
     milestoneCount = 0;
     activeTab = 'generators';
     setActiveTab(refs, activeTab);
     refreshShopAndProgress();
+  }
+
+  refs.prestigePanel.addEventListener('click', () => {
+    if (!canPrestige(state)) return;
+    prestige(state);
+    onPrestiged();
   });
+
+  // Dev-only live-test controls (CLAUDE.md hard rules stay intact for real
+  // players: these never render or wire up in a production build).
+  if (import.meta.env.DEV) {
+    refs.adminBar.classList.add('is-visible');
+    refs.adminBar.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
+      if (!btn) return;
+      switch (btn.dataset['action']) {
+        case 'new-game':
+          if (confirm('Wipe the current save and start a new game?')) {
+            saveSuspended = true;
+            localStorage.removeItem(SAVE_KEY);
+            location.reload();
+          }
+          return;
+        case 'skip-milestone':
+          debugSkipToNextMilestone(state);
+          break;
+        case 'add-energy':
+          debugAddEnergy(state);
+          break;
+        case 'add-crystals':
+          debugAddCrystals(state);
+          break;
+        case 'force-prestige':
+          debugForcePrestige(state);
+          onPrestiged();
+          return;
+        default:
+          return;
+      }
+      refreshShopAndProgress();
+    });
+  }
 
   // Fixed-rate logic tick (CLAUDE.md: 10-30 Hz, independent of rendering).
   const tickDt = 1 / TICK_RATE;
@@ -104,17 +147,21 @@ function main(): void {
   // Shop affordability + milestone tracker don't need 60fps churn.
   setInterval(refreshShopAndProgress, UI_REFRESH_INTERVAL_MS);
 
-  setInterval(() => saveState(state), AUTOSAVE_INTERVAL_MS);
-  window.addEventListener('beforeunload', () => saveState(state));
+  setInterval(() => {
+    if (!saveSuspended) saveState(state);
+  }, AUTOSAVE_INTERVAL_MS);
+  window.addEventListener('beforeunload', () => {
+    if (!saveSuspended) saveState(state);
+  });
 
   let lastFrame = performance.now();
   function frame(now: number): void {
     const dt = Math.min(0.25, (now - lastFrame) / 1000);
     lastFrame = now;
 
-    const fraction = updateStage(state, refs);
-    scene.setEra(formatDistance(state.currencies.distanceRun).symbol);
-    scene.update(dt, fraction);
+    const { visualFraction, ruler } = updateStage(state, refs);
+    scene.setEra(ruler.symbol);
+    scene.update(dt, visualFraction, ruler);
     scene.draw();
 
     requestAnimationFrame(frame);

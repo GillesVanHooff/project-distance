@@ -6,8 +6,39 @@
 }
 
 .stage__odometer {
+  position: relative;
   text-align: center;
   padding: 30px 20px 18px 20px;
+}
+
+// Dev-only live-test controls; hidden unless main.ts unhides it (import.meta.env.DEV).
+.stage__admin {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  gap: 6px;
+
+  &.is-visible {
+    display: flex;
+  }
+}
+
+.stage__admin-btn {
+  font-family: $font-mono;
+  font-size: 11px;
+  color: $text-muted;
+  background: $tab-bg;
+  border: 1px solid $border-tab;
+  border-radius: $radius-control;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    color: $accent-blue-light;
+    border-color: $accent-blue-border;
+  }
 }
 
 .stage__distance {

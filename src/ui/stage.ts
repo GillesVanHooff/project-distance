@@ -2,7 +2,14 @@ import { PERCENT_C_UNLOCK } from '../core/content';
 import { distanceRate, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
 import type { GameState } from '../core/state';
-import { formatDistance, formatNumber, formatPercentOfC, formatSpeed } from '../core/units';
+import {
+  formatDistance,
+  formatNumber,
+  formatPercentOfC,
+  formatSpeed,
+  toUnitScale,
+  unitScaleForDistance,
+} from '../core/units';
 import type { UiRefs } from './dom';
 
 /** Log-mapped 0..1 visual intensity for the canvas scene — not literal % of c, so
@@ -13,8 +20,21 @@ export function visualSpeedFraction(rawSpeedPlanckPerSec: number): number {
   return 0.08 + norm * 0.92;
 }
 
-export function updateStage(state: GameState, refs: UiRefs): number {
-  const { value, symbol } = formatDistance(state.currencies.distanceRun);
+/** Live numbers for the scene's scale ruler — same unit the odometer is showing,
+ * so the ruler's ticks are never lying relative to the number above them. */
+export interface RulerReading {
+  symbol: string;
+  distanceInUnit: number;
+  speedInUnitPerSec: number;
+}
+
+export interface StageFrame {
+  visualFraction: number;
+  ruler: RulerReading;
+}
+
+export function updateStage(state: GameState, refs: UiRefs): StageFrame {
+  const { value, symbol, raw } = formatDistance(state.currencies.distanceRun);
   refs.distanceValue.textContent = value;
   refs.distanceUnit.textContent = symbol;
 
@@ -37,7 +57,10 @@ export function updateStage(state: GameState, refs: UiRefs): number {
   const fraction = visualSpeedFraction(rawSpeedNum);
   refs.speedBarFill.style.width = `${Math.round(fraction * 100)}%`;
 
-  return fraction;
+  const scale = unitScaleForDistance(state.currencies.distanceRun);
+  const speedInUnitPerSec = toUnitScale(spd, scale);
+
+  return { visualFraction: fraction, ruler: { symbol, distanceInUnit: raw, speedInUnitPerSec } };
 }
 
 export function hideClickHint(refs: UiRefs): void {

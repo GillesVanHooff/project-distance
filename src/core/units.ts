@@ -77,29 +77,73 @@ function toSuperscript(n: number): string {
   return String(n).split('').map((c) => SUPERSCRIPTS[c] ?? c).join('');
 }
 
-export interface FormattedDistance {
-  value: string;
-  symbol: string;
-}
-
-/** Format a distance in Planck lengths using the unit ladder. */
-export function formatDistance(planck: Decimal): FormattedDistance {
-  const meters = planck.mul(PLANCK_METERS);
+function findUnitRow(meters: Decimal): UnitRow | undefined {
   let row: UnitRow | undefined;
   for (const r of UNIT_LADDER) {
     if (meters.gte(r.minMeters)) row = r;
     else break;
   }
+  return row;
+}
+
+export interface UnitScale {
+  symbol: string;
+  /** Meters per one of this unit — for converting other planck-based quantities (e.g. speed) into it. */
+  metersPerUnit: number;
+}
+
+/** Which unit row currently applies to a distance, exposed so callers (e.g. the
+ * particle-scene ruler) can convert other planck-based quantities into the same
+ * unit the odometer is displaying, without duplicating the ladder lookup. */
+export function unitScaleForDistance(planck: Decimal): UnitScale {
+  const row = findUnitRow(planck.mul(PLANCK_METERS));
+  return row ? { symbol: row.symbol, metersPerUnit: row.divisor } : { symbol: 'ℓₚ', metersPerUnit: PLANCK_METERS };
+}
+
+/** Convert a planck-based quantity (distance, speed, ...) into a given unit scale. */
+export function toUnitScale(planck: Decimal, scale: UnitScale): number {
+  return planck.mul(PLANCK_METERS).div(scale.metersPerUnit).toNumber();
+}
+
+export interface FormattedDistance {
+  value: string;
+  symbol: string;
+  /** Numeric value in the displayed unit, un-suffixed (e.g. 45231900 for "45.2M km"). */
+  raw: number;
+}
+
+/** Format a distance in Planck lengths using the unit ladder. */
+export function formatDistance(planck: Decimal): FormattedDistance {
+  const meters = planck.mul(PLANCK_METERS);
+  const row = findUnitRow(meters);
   if (!row) {
     // Planck-length range: 1 → 6.25×10²⁵ ℓₚ, scientific notation past 1000.
     const value = planck.lt(1000)
       ? Math.floor(planck.toNumber()).toString()
       : formatScientific(planck);
-    return { value, symbol: 'ℓₚ' };
+    return { value, symbol: 'ℓₚ', raw: planck.toNumber() };
   }
   const inUnit = meters.div(row.divisor);
-  const value = row.suffixed ? formatNumber(inUnit) : to3Sig(inUnit.toNumber());
-  return { value, symbol: row.symbol };
+  const raw = inUnit.toNumber();
+  const value = row.suffixed ? formatNumber(inUnit) : to3Sig(raw);
+  return { value, symbol: row.symbol, raw };
+}
+
+/** Format a plain (already unit-scaled) magnitude with K/M/B/T suffixes — used by
+ * the scene ruler, which works in plain numbers rather than Decimal since values
+ * are already bounded to the current display unit's safe range. */
+export function formatMagnitude(n: number): string {
+  if (n < 0) return '-' + formatMagnitude(-n);
+  if (n === 0) return '0';
+  if (n < 1000) return Number.isInteger(n) ? n.toString() : to3Sig(n);
+  const exp = Math.floor(Math.log10(n));
+  const tier = Math.floor(exp / 3);
+  if (tier < SUFFIXES.length) {
+    const scaled = n / 10 ** (tier * 3);
+    return to3Sig(scaled) + SUFFIXES[tier];
+  }
+  const mantissa = n / 10 ** exp;
+  return `${mantissa.toFixed(2)}×10${toSuperscript(exp)}`;
 }
 
 export function formatDistanceStr(planck: Decimal): string {

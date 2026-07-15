@@ -6,6 +6,32 @@
  * to it each frame.
  */
 
+import { formatMagnitude } from '../core/units';
+
+interface RulerInput {
+  /** Current distance in whatever unit the odometer is displaying right now. */
+  distanceInUnit: number;
+  /** Current speed in that same unit, per second. */
+  speedInUnitPerSec: number;
+}
+
+interface NiceStep {
+  exp: number;
+  value: number;
+}
+
+/** Snap a rough step size to the nearest "1 / 2 / 5 × 10ⁿ" — the classic
+ * map-scale-bar trick — so ruler labels always land on a round number no
+ * matter how oddly the real unit-per-tick amount comes out. */
+function niceStep(rough: number): NiceStep {
+  const exp = Math.floor(Math.log10(rough));
+  const mantissa = rough / 10 ** exp;
+  if (mantissa < 1.5) return { exp, value: 1 * 10 ** exp };
+  if (mantissa < 3.5) return { exp, value: 2 * 10 ** exp };
+  if (mantissa < 7.5) return { exp, value: 5 * 10 ** exp };
+  return { exp: exp + 1, value: 10 ** (exp + 1) };
+}
+
 interface FloatingText {
   x: number;
   y: number;
@@ -138,6 +164,17 @@ export class ParticleScene {
   private readonly trailHistory: number[] = [];
   private static readonly TRAIL_SAMPLES = 24;
 
+  // Ruler state — see drawRuler(). Position comes straight from the real
+  // distance/unit each frame; only the tick *step size* needs smoothing, so it
+  // doesn't relabel every frame as speed jitters.
+  private rulerDistance = 0;
+  private smoothedTickSpeed = 0;
+  private tickStep: NiceStep = { exp: 0, value: 1 };
+  private tickStepAge = 999; // large: no fade-in flash on first paint
+  private static readonly RULER_TARGET_PX = 140;
+  private static readonly RULER_TEMPO_SECONDS = 1.8;
+  private static readonly RULER_MINOR_PER_MAJOR = 5;
+
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas context unavailable');
@@ -182,11 +219,31 @@ export class ParticleScene {
     this.ripples.push({ x, y, age: 0 });
   }
 
-  /** speedFraction: 0..1 visual intensity (log-mapped by the caller — see ui/stage.ts). */
-  update(dt: number, speedFraction: number): void {
+  /** Horizontal anchor the particle sits at — also where the ruler's "you are here" cursor lands. */
+  private get particleX(): number {
+    return this.width * 0.35;
+  }
+
+  /** speedFraction: 0..1 visual intensity (log-mapped by the caller — see ui/stage.ts).
+   * ruler: real distance/speed in the odometer's current unit, for truthful tick labels. */
+  update(dt: number, speedFraction: number, ruler: RulerInput): void {
     this.time += dt;
     this.visualSpeed += (speedFraction - this.visualSpeed) * Math.min(1, dt * 2.5);
     this.scrollPx += dt * (20 + this.visualSpeed * 320);
+
+    this.rulerDistance = ruler.distanceInUnit;
+    // Smooth the speed feeding the tick-step choice (not tick position — that
+    // tracks the real distance exactly) so the step size doesn't relabel on
+    // every small speed fluctuation.
+    this.smoothedTickSpeed += (Math.max(0, ruler.speedInUnitPerSec) - this.smoothedTickSpeed) * Math.min(1, dt * 0.8);
+    if (this.smoothedTickSpeed > 0) {
+      const candidate = niceStep(this.smoothedTickSpeed * ParticleScene.RULER_TEMPO_SECONDS);
+      if (candidate.value !== this.tickStep.value) {
+        this.tickStep = candidate;
+        this.tickStepAge = 0;
+      }
+    }
+    this.tickStepAge += dt;
 
     this.wobbleTimer -= dt;
     if (this.wobbleTimer <= 0) {
@@ -223,7 +280,7 @@ export class ParticleScene {
 
     this.drawGrid(p);
     this.drawStreaks(p);
-    this.drawRuler();
+    this.drawRuler(PARTICLE_PALETTE);
     this.drawParticle(PARTICLE_PALETTE);
     this.drawRipples(PARTICLE_PALETTE);
     this.drawFloatingText(PARTICLE_PALETTE);
@@ -264,7 +321,13 @@ export class ParticleScene {
     ctx.globalAlpha = 1;
   }
 
-  private drawRuler(): void {
+  /** Tape-measure ruler: tick spacing is a "nice" round step (1/2/5×10ⁿ) in the
+   * odometer's current unit, chosen from the smoothed real speed so the tempo
+   * stays readable at any magnitude (see niceStep()); tick *positions* come
+   * straight from the real distance, so the labels are never fiction — they
+   * agree with the odometer above. A small cursor pinned to the particle marks
+   * the exact (non-rounded) reading between the two nearest ticks. */
+  private drawRuler(p: EraPalette): void {
     const { ctx } = this;
     // +0.5 keeps 1px strokes aligned to a device-pixel center instead of a
     // boundary, which otherwise anti-aliases them into a faint 2px smear.
@@ -277,32 +340,82 @@ export class ParticleScene {
     ctx.lineTo(this.width, rulerY);
     ctx.stroke();
 
-    const minorSpacing = 28;
-    const minorOffset = (this.scrollPx * 0.6) % minorSpacing;
-    ctx.strokeStyle = 'rgba(124,135,160,0.4)';
-    ctx.beginPath();
-    for (let x = -minorOffset; x < this.width; x += minorSpacing) {
-      const xr = Math.round(x) + 0.5;
-      ctx.moveTo(xr, rulerY);
-      ctx.lineTo(xr, rulerY + 8);
-    }
-    ctx.stroke();
+    const step = this.tickStep;
+    if (step.value > 0) {
+      const rawStep = this.smoothedTickSpeed * ParticleScene.RULER_TEMPO_SECONDS;
+      // Stretch/compress slightly off the 140px target so the step's label
+      // lands on a round number — the map-scale-bar trick from niceStep().
+      const pxPerStep =
+        rawStep > 0
+          ? Math.min(400, Math.max(40, ParticleScene.RULER_TARGET_PX * (step.value / rawStep)))
+          : ParticleScene.RULER_TARGET_PX;
+      const minorPerMajor = ParticleScene.RULER_MINOR_PER_MAJOR;
+      const minorPx = pxPerStep / minorPerMajor;
 
-    const majorSpacing = minorSpacing * 5;
-    const majorOffset = (this.scrollPx * 0.6) % majorSpacing;
-    ctx.strokeStyle = 'rgba(220,228,242,0.6)';
-    ctx.beginPath();
-    for (let x = -majorOffset; x < this.width; x += majorSpacing) {
-      const xr = Math.round(x) + 0.5;
-      ctx.moveTo(xr, rulerY - 12);
-      ctx.lineTo(xr, rulerY + 4);
+      const anchorValue = Math.floor(this.rulerDistance / step.value) * step.value;
+      const frac = (this.rulerDistance - anchorValue) / step.value;
+      const anchorX = this.particleX - frac * pxPerStep;
+
+      const iMin = Math.floor(-anchorX / minorPx) - 1;
+      const iMax = Math.ceil((this.width - anchorX) / minorPx) + 1;
+
+      // Fresh grid fades in over the transition so a step-size change (a
+      // "gear shift" as speed crosses an order of magnitude) reads as a
+      // deliberate recalibration rather than a jump-cut.
+      ctx.globalAlpha = Math.min(1, this.tickStepAge / 0.25);
+
+      ctx.strokeStyle = 'rgba(124,135,160,0.4)';
+      ctx.beginPath();
+      for (let i = iMin; i <= iMax; i++) {
+        if (i % minorPerMajor === 0) continue;
+        const xr = Math.round(anchorX + i * minorPx) + 0.5;
+        ctx.moveTo(xr, rulerY);
+        ctx.lineTo(xr, rulerY + 8);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(220,228,242,0.6)';
+      ctx.beginPath();
+      for (let i = iMin; i <= iMax; i++) {
+        if (i % minorPerMajor !== 0) continue;
+        const xr = Math.round(anchorX + i * minorPx) + 0.5;
+        ctx.moveTo(xr, rulerY - 12);
+        ctx.lineTo(xr, rulerY + 4);
+      }
+      ctx.stroke();
+
+      ctx.font = '600 11px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(220,228,242,0.72)';
+      for (let i = iMin; i <= iMax; i++) {
+        if (i % minorPerMajor !== 0) continue;
+        const x = anchorX + i * minorPx;
+        if (x < -24 || x > this.width + 24) continue;
+        const k = i / minorPerMajor;
+        const value = Math.round((anchorValue + k * step.value) * 1e6) / 1e6;
+        ctx.fillText(formatMagnitude(value), Math.round(x) + 0.5, rulerY - 18);
+      }
+
+      ctx.globalAlpha = 1;
     }
-    ctx.stroke();
+
+    // "You are here" cursor — pinned to the particle's x position, independent
+    // of the tick grid, so it never jumps when the grid's step size reflows.
+    ctx.fillStyle = p.particleMid;
+    ctx.shadowColor = p.glow;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(this.particleX, rulerY + 10);
+    ctx.lineTo(this.particleX - 4, rulerY + 18);
+    ctx.lineTo(this.particleX + 4, rulerY + 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
   private drawParticle(p: EraPalette): void {
     const { ctx } = this;
-    const px = this.width * 0.35;
+    const px = this.particleX;
     const py = this.height * 0.42;
     const bob = this.bob;
 

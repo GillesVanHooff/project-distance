@@ -30,6 +30,33 @@
         <!-- ============ CENTER: STAGE ============ -->
         <main class="panel stage" data-screen-label="Stage">
           <div class="stage__odometer">
+            <div class="stage__admin" id="admin-bar">
+              <button class="stage__admin-btn" data-action="new-game" type="button" title="Wipe save and reload">
+                New Game
+              </button>
+              <button
+                class="stage__admin-btn"
+                data-action="skip-milestone"
+                type="button"
+                title="Jump distance to the next milestone"
+              >
+                Skip&nbsp;⇥
+              </button>
+              <button class="stage__admin-btn" data-action="add-energy" type="button" title="Add 1e12 energy">
+                +Energy
+              </button>
+              <button class="stage__admin-btn" data-action="add-crystals" type="button" title="Add 5 time crystals">
+                +Crystals
+              </button>
+              <button
+                class="stage__admin-btn"
+                data-action="force-prestige"
+                type="button"
+                title="Prestige now, even below c"
+              >
+                Prestige
+              </button>
+            </div>
             <div class="stage__distance">
               <span id="distance-value">0</span><span class="stage__unit" id="distance-unit">ℓₚ</span>
             </div>

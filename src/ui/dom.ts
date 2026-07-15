@@ -2,6 +2,7 @@ export interface UiRefs {
   shopList: HTMLElement;
   shopTabs: HTMLButtonElement[];
   photonTabIcon: HTMLElement;
+  adminBar: HTMLElement;
   distanceValue: HTMLElement;
   distanceUnit: HTMLElement;
   distanceComparison: HTMLElement;
@@ -38,6 +39,7 @@ export function queryRefs(): UiRefs {
     shopList: req('shop-list'),
     shopTabs: Array.from(document.querySelectorAll<HTMLButtonElement>('.shop__tab[data-tab]')),
     photonTabIcon: req('photon-tab-icon'),
+    adminBar: req('admin-bar'),
     distanceValue: req('distance-value'),
     distanceUnit: req('distance-unit'),
     distanceComparison: req('distance-comparison'),

@@ -140,7 +140,7 @@ export function click(state: GameState): Decimal {
 // ---------------------------------------------------------------------------
 
 /** Distance never decreases; energy is earned 1:1 per ℓₚ traveled. */
-function gainDistance(state: GameState, delta: Decimal): void {
+export function gainDistance(state: GameState, delta: Decimal): void {
   state.currencies.distanceRun = state.currencies.distanceRun.add(delta);
   state.currencies.distanceLifetime = state.currencies.distanceLifetime.add(delta);
   state.currencies.energy = state.currencies.energy.add(delta);
