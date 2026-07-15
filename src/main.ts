@@ -2,7 +2,13 @@ import './styles/main.scss';
 
 import { TICK_RATE } from './core/constants';
 import { buyGenerator, buyUpgrade, canPrestige, click, prestige, tick } from './core/logic';
-import { debugAddCrystals, debugAddEnergy, debugForcePrestige, debugSkipToNextMilestone } from './core/debug';
+import {
+  debugAddCrystals,
+  debugAddEnergy,
+  debugAddSpeed,
+  debugForcePrestige,
+  debugSkipToNextMilestone,
+} from './core/debug';
 import { MILESTONES, milestonesReached } from './core/milestones';
 import { applyOfflineProgress, deserialize, serialize } from './core/save';
 import { newGame, type GameState } from './core/state';
@@ -119,6 +125,9 @@ function main(): void {
           break;
         case 'add-crystals':
           debugAddCrystals(state);
+          break;
+        case 'add-speed':
+          debugAddSpeed(state);
           break;
         case 'force-prestige':
           debugForcePrestige(state);

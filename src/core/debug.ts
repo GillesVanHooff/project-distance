@@ -42,3 +42,15 @@ export function debugAddCrystals(state: GameState, amount: Decimal = D(5)): void
   state.currencies.crystals = state.currencies.crystals.add(amount);
   state.crystalsLifetime = state.crystalsLifetime.add(amount);
 }
+
+/**
+ * Roughly double the last generator's owned count (minimum +10), for testing
+ * the speed bar / %-of-c display without grinding. Repeatable: each press
+ * ramps speed up further, converging on c over a handful of clicks rather
+ * than jumping straight there (that's what Force Prestige is for).
+ */
+export function debugAddSpeed(state: GameState): void {
+  const lastIndex = GENERATORS.length - 1;
+  const current = state.generators[lastIndex] ?? 0;
+  state.generators[lastIndex] = current + Math.max(10, current);
+}

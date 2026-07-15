@@ -419,9 +419,12 @@ export class ParticleScene {
     const py = this.height * 0.42;
     const bob = this.bob;
 
-    const trailLen = this.width * 0.24;
+    // No trail at rest; once moving it jumps to a small-but-noticeable length,
+    // then grows toward the max as visualSpeed climbs toward c.
+    const trailFrac = this.visualSpeed <= 0 ? 0 : 0.06 + 0.18 * this.visualSpeed;
+    const trailLen = this.width * trailFrac;
     const hist = this.trailHistory;
-    if (hist.length > 1) {
+    if (trailLen > 0 && hist.length > 1) {
       const n = hist.length;
       const pts = hist.map((y, i) => ({
         x: px - trailLen + (trailLen * i) / (n - 1),
