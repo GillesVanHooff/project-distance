@@ -96,6 +96,11 @@ const ERA_PALETTES: EraPalette[] = [
   },
 ];
 
+// The particle itself always stays violet — only the background/grid/streaks
+// shift per era (CLAUDE.md: "background palette shifts per era", particle
+// color is not part of that spec).
+const PARTICLE_PALETTE = ERA_PALETTES[0]!;
+
 const UNIT_ERA: Record<string, number> = {
   ℓₚ: 0,
   nm: 0,
@@ -121,6 +126,17 @@ export class ParticleScene {
   private visualSpeed = 0;
   private palette: EraPalette = ERA_PALETTES[1]!;
   private time = 0;
+  // Random-walk vertical jitter layered on top of the idle sine bob — retargets
+  // itself at an interval and amplitude that both shrink as visualSpeed rises,
+  // so the particle reads as increasingly erratic (not just faster).
+  private wobbleY = 0;
+  private wobbleTarget = 0;
+  private wobbleTimer = 0;
+  private bob = 0;
+  // Recent bob samples (oldest first), used to draw the trail as a curve that
+  // traces the particle's actual up/down path instead of a flat line.
+  private readonly trailHistory: number[] = [];
+  private static readonly TRAIL_SAMPLES = 24;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -172,6 +188,21 @@ export class ParticleScene {
     this.visualSpeed += (speedFraction - this.visualSpeed) * Math.min(1, dt * 2.5);
     this.scrollPx += dt * (20 + this.visualSpeed * 320);
 
+    this.wobbleTimer -= dt;
+    if (this.wobbleTimer <= 0) {
+      const amplitude = 3 + this.visualSpeed * 16;
+      this.wobbleTarget = (Math.random() * 2 - 1) * amplitude;
+      this.wobbleTimer = 0.4 - this.visualSpeed * 0.3 + Math.random() * 0.2;
+    }
+    // Exponential (rather than linear) approach to the target — no overshoot,
+    // reads as smoother easing instead of a snap-then-drift.
+    const wobbleRate = 3 + this.visualSpeed * 8;
+    this.wobbleY += (this.wobbleTarget - this.wobbleY) * (1 - Math.exp(-wobbleRate * dt));
+
+    this.bob = Math.sin(this.time * 1.6) * 3 + this.wobbleY;
+    this.trailHistory.push(this.bob);
+    if (this.trailHistory.length > ParticleScene.TRAIL_SAMPLES) this.trailHistory.shift();
+
     for (const f of this.floating) f.age += dt;
     this.floating = this.floating.filter((f) => f.age < 1.4);
     for (const r of this.ripples) r.age += dt;
@@ -193,9 +224,9 @@ export class ParticleScene {
     this.drawGrid(p);
     this.drawStreaks(p);
     this.drawRuler();
-    this.drawParticle(p);
-    this.drawRipples(p);
-    this.drawFloatingText(p);
+    this.drawParticle(PARTICLE_PALETTE);
+    this.drawRipples(PARTICLE_PALETTE);
+    this.drawFloatingText(PARTICLE_PALETTE);
   }
 
   private drawGrid(p: EraPalette): void {
@@ -235,9 +266,11 @@ export class ParticleScene {
 
   private drawRuler(): void {
     const { ctx } = this;
-    const rulerY = this.height - 44;
+    // +0.5 keeps 1px strokes aligned to a device-pixel center instead of a
+    // boundary, which otherwise anti-aliases them into a faint 2px smear.
+    const rulerY = Math.round(this.height - 44) + 0.5;
 
-    ctx.strokeStyle = 'rgba(124,135,160,0.22)';
+    ctx.strokeStyle = 'rgba(124,135,160,0.34)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, rulerY);
@@ -246,42 +279,66 @@ export class ParticleScene {
 
     const minorSpacing = 28;
     const minorOffset = (this.scrollPx * 0.6) % minorSpacing;
-    ctx.strokeStyle = 'rgba(124,135,160,0.28)';
+    ctx.strokeStyle = 'rgba(124,135,160,0.4)';
     ctx.beginPath();
     for (let x = -minorOffset; x < this.width; x += minorSpacing) {
-      ctx.moveTo(x, rulerY);
-      ctx.lineTo(x, rulerY + 8);
+      const xr = Math.round(x) + 0.5;
+      ctx.moveTo(xr, rulerY);
+      ctx.lineTo(xr, rulerY + 8);
     }
     ctx.stroke();
 
     const majorSpacing = minorSpacing * 5;
     const majorOffset = (this.scrollPx * 0.6) % majorSpacing;
-    ctx.strokeStyle = 'rgba(220,228,242,0.45)';
+    ctx.strokeStyle = 'rgba(220,228,242,0.6)';
     ctx.beginPath();
     for (let x = -majorOffset; x < this.width; x += majorSpacing) {
-      ctx.moveTo(x, rulerY - 12);
-      ctx.lineTo(x, rulerY + 4);
+      const xr = Math.round(x) + 0.5;
+      ctx.moveTo(xr, rulerY - 12);
+      ctx.lineTo(xr, rulerY + 4);
     }
     ctx.stroke();
   }
 
   private drawParticle(p: EraPalette): void {
     const { ctx } = this;
-    const px = this.width * 0.28;
+    const px = this.width * 0.35;
     const py = this.height * 0.42;
-    const bob = Math.sin(this.time * 1.6) * 3;
+    const bob = this.bob;
 
-    const trailGrad = ctx.createLinearGradient(px - this.width * 0.2, py, px, py);
-    trailGrad.addColorStop(0, 'transparent');
-    trailGrad.addColorStop(1, p.glow);
-    ctx.strokeStyle = trailGrad;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(px - this.width * 0.2, py + bob);
-    ctx.lineTo(px, py + bob);
-    ctx.stroke();
+    const trailLen = this.width * 0.24;
+    const hist = this.trailHistory;
+    if (hist.length > 1) {
+      const n = hist.length;
+      const pts = hist.map((y, i) => ({
+        x: px - trailLen + (trailLen * i) / (n - 1),
+        y: py + y,
+      }));
 
-    const r = 11 + Math.min(6, this.visualSpeed * 6);
+      const trailGrad = ctx.createLinearGradient(px - trailLen, py, px, py);
+      trailGrad.addColorStop(0, 'transparent');
+      trailGrad.addColorStop(0.65, p.glow);
+      trailGrad.addColorStop(1, p.particleMid);
+      ctx.strokeStyle = trailGrad;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = p.glow;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.moveTo(pts[0]!.x, pts[0]!.y);
+      // Quadratic-through-midpoints: turns the raw polyline into a smooth
+      // curve that traces the particle's actual recent up/down path.
+      for (let i = 1; i < n - 1; i++) {
+        const mid = { x: (pts[i]!.x + pts[i + 1]!.x) / 2, y: (pts[i]!.y + pts[i + 1]!.y) / 2 };
+        ctx.quadraticCurveTo(pts[i]!.x, pts[i]!.y, mid.x, mid.y);
+      }
+      ctx.lineTo(pts[n - 1]!.x, pts[n - 1]!.y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    const r = (11 + Math.min(6, this.visualSpeed * 6)) * 1.1;
     const coreGrad = ctx.createRadialGradient(px - r * 0.25, py + bob - r * 0.25, 1, px, py + bob, r);
     coreGrad.addColorStop(0, p.particleCore);
     coreGrad.addColorStop(0.6, p.particleMid);

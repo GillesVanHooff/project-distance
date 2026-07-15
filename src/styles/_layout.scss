@@ -54,6 +54,12 @@
   .stage {
     min-width: 0;
     max-width: none;
+    // .shop/.progress/.stage's `flex` shorthand above sizes desktop columns
+    // (row axis = width). Stacked mode flips to a column axis, so those
+    // grow/shrink/basis numbers would size *height* instead and can crush
+    // a panel down to its min-height, clipping content. Reset to natural
+    // content height here.
+    flex: 0 0 auto;
   }
 
   .stage {
