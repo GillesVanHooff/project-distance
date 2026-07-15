@@ -38,6 +38,8 @@ export interface GameState {
   burstCooldownSec: number;
   /** Token bucket for click diminishing returns. */
   clickBucket: number;
+  /** Click combo charge (0..1) — builds while clicking, decays when idle. */
+  clickCombo: number;
 }
 
 export function newGame(): GameState {
@@ -58,6 +60,7 @@ export function newGame(): GameState {
     burstActiveSec: 0,
     burstCooldownSec: 0,
     clickBucket: 5,
+    clickCombo: 0,
   };
 }
 

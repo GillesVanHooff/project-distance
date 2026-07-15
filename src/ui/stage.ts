@@ -1,5 +1,5 @@
 import { PERCENT_C_UNLOCK } from '../core/content';
-import { distanceRate, speed } from '../core/logic';
+import { distanceRate, generatorSpeed, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
 import type { GameState } from '../core/state';
 import {
@@ -13,9 +13,12 @@ import {
 import type { UiRefs } from './dom';
 
 /** Log-mapped 0..1 visual intensity for the canvas scene — not literal % of c, so
- * ambient motion stays readable across all 43 orders of magnitude the real speed spans. */
+ * ambient motion stays readable across all 43 orders of magnitude the real speed spans.
+ * Below 1 ℓₚ/s reads as stopped: the speed stat's own display floors to "0" below that
+ * (formatDistance's chunky-integer rounding), so anything smaller — e.g. a click combo
+ * mid-decay — would otherwise show a moving trail next to a "0" readout. */
 export function visualSpeedFraction(rawSpeedPlanckPerSec: number): number {
-  if (rawSpeedPlanckPerSec <= 0) return 0;
+  if (rawSpeedPlanckPerSec < 1) return 0;
   const norm = Math.max(0, Math.min(1, Math.log10(rawSpeedPlanckPerSec) / 43));
   return 0.08 + norm * 0.92;
 }
@@ -58,7 +61,10 @@ export function updateStage(state: GameState, refs: UiRefs): StageFrame {
   refs.speedBarFill.style.width = `${Math.round(fraction * 100)}%`;
 
   const scale = unitScaleForDistance(state.currencies.distanceRun);
-  const speedInUnitPerSec = toUnitScale(spd, scale);
+  // Ruler tick-step scaling deliberately ignores the click combo (uses
+  // generator-only speed) — otherwise every click's transient speed spike
+  // reflows the scale bar's step size, reading as a continuous "zoom" jitter.
+  const speedInUnitPerSec = toUnitScale(generatorSpeed(state), scale);
 
   return { visualFraction: fraction, ruler: { symbol, distanceInUnit: raw, speedInUnitPerSec } };
 }

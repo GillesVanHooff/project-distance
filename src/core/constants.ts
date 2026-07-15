@@ -49,6 +49,17 @@ export const CLICK_BASE_FLAT = 1;
 export const CLICK_RATE_CAP = 5;
 export const CLICK_OVERFLOW_FACTOR = 0.15;
 
+/**
+ * Click combo: sustained clicking ramps a 0..1 charge (see clickCombo() in
+ * logic.ts) that adds real, visible speed — this is what makes the speed
+ * stat move before Generator 1 exists, per CLAUDE.md rule 3's
+ * "buff-with-duration" active-play bonus. Builds fast (a few clicks fills
+ * it), decays fast (~1.25s of no clicking empties it), so it reads as
+ * momentum from continuous clicking rather than a permanent gain.
+ */
+export const CLICK_COMBO_BUILD_PER_CLICK = 0.4;
+export const CLICK_COMBO_DECAY_PER_SEC = 0.8;
+
 /** Burst active ability: clicks are boosted for a duration, then a cooldown. */
 export const BURST_MULTIPLIER = 4;
 export const BURST_DURATION_SEC = 10;

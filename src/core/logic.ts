@@ -5,6 +5,8 @@ import {
   BURST_DURATION_SEC,
   BURST_MULTIPLIER,
   CLICK_BASE_FLAT,
+  CLICK_COMBO_BUILD_PER_CLICK,
+  CLICK_COMBO_DECAY_PER_SEC,
   CLICK_OVERFLOW_FACTOR,
   CLICK_RATE_CAP,
   C_PLANCK_PER_SEC,
@@ -58,9 +60,28 @@ export function rawSpeed(state: GameState): Decimal {
   return prod.mul(globalMultiplier(state));
 }
 
-/** Actual speed: capped at c. */
-export function speed(state: GameState): Decimal {
+/** Generator-only speed, capped at c — the basis for the prestige gate,
+ * clickValue()'s "N seconds of income" rule, and the scene ruler's tick-step
+ * scaling (see ui/stage.ts): kept free of the click combo so combo can't
+ * compound through the click-value formula, and so every click's transient
+ * speed spike doesn't make the ruler's scale bar reflow. */
+export function generatorSpeed(state: GameState): Decimal {
   return Decimal.min(rawSpeed(state), C_PLANCK_PER_SEC);
+}
+
+/** Extra speed from the click combo charge (see CLICK_COMBO_* in constants.ts):
+ * scales with the player's current flat click value, so it stays in step with
+ * click upgrades and is 0 the instant clicking stops long enough to decay. */
+export function comboSpeed(state: GameState): Decimal {
+  if (state.clickCombo <= 0) return ZERO;
+  return flatClickValue(state).mul(state.clickCombo * CLICK_RATE_CAP);
+}
+
+/** Actual speed: generator speed plus click combo, capped at c. This is what
+ * the speed stat/bar and the passive tick rate use — clicking continuously
+ * visibly raises it, even before any generator exists. */
+export function speed(state: GameState): Decimal {
+  return Decimal.min(rawSpeed(state).add(comboSpeed(state)), C_PLANCK_PER_SEC);
 }
 
 /** Time compression from time machines — multiplies distance per real second, post-cap. */
@@ -93,13 +114,15 @@ export function clickSeconds(state: GameState): number {
  * Full click value at bucket factor 1 (no burst): flat bootstrap value plus
  * N seconds of the player's *current* passive income (clickSeconds() — the
  * "clicks are worth N seconds of income" rule). Because it reads
- * distanceRate() live, a click is worth more the faster the player is
+ * generator speed live, a click is worth more the faster the player is
  * already going — this is what makes clicking compound with generator
- * growth, and why it does nothing for a player with 0 generators and 0
- * clicks/sec (idle play): there's no distanceRate to multiply.
+ * growth. Deliberately reads generator speed rather than the combo-inclusive
+ * distanceRate(), so the click combo (below) can't compound through this
+ * formula too — it only ever adds visible speed, never inflates click value.
  */
 export function clickValue(state: GameState): Decimal {
-  return flatClickValue(state).add(distanceRate(state).mul(clickSeconds(state)));
+  const generatorPassiveRate = generatorSpeed(state).mul(timeCompression(state));
+  return flatClickValue(state).add(generatorPassiveRate.mul(clickSeconds(state)));
 }
 
 export function burstUnlocked(state: GameState): boolean {
@@ -132,6 +155,7 @@ export function click(state: GameState): Decimal {
   if (state.burstActiveSec > 0) value = value.mul(BURST_MULTIPLIER);
   gainDistance(state, value);
   state.totalClicks += 1;
+  state.clickCombo = Math.min(1, state.clickCombo + CLICK_COMBO_BUILD_PER_CLICK);
   return value;
 }
 
@@ -155,6 +179,7 @@ export function tick(state: GameState, dt: number): void {
     state.burstCooldownSec = Math.max(0, state.burstCooldownSec - dt);
   }
   state.clickBucket = Math.min(CLICK_RATE_CAP, state.clickBucket + CLICK_RATE_CAP * dt);
+  state.clickCombo = Math.max(0, state.clickCombo - CLICK_COMBO_DECAY_PER_SEC * dt);
 }
 
 // ---------------------------------------------------------------------------

@@ -229,6 +229,10 @@ export class ParticleScene {
   update(dt: number, speedFraction: number, ruler: RulerInput): void {
     this.time += dt;
     this.visualSpeed += (speedFraction - this.visualSpeed) * Math.min(1, dt * 2.5);
+    // Exponential easing asymptotically approaches the target but never quite
+    // reaches it — left alone, a trail floor further down (drawParticle) would
+    // never fully clear after the particle has ever moved. Snap once close.
+    if (Math.abs(speedFraction - this.visualSpeed) < 0.001) this.visualSpeed = speedFraction;
     this.scrollPx += dt * (20 + this.visualSpeed * 320);
 
     this.rulerDistance = ruler.distanceInUnit;
@@ -419,9 +423,12 @@ export class ParticleScene {
     const py = this.height * 0.42;
     const bob = this.bob;
 
-    // No trail at rest; once moving it jumps to a small-but-noticeable length,
-    // then grows toward the max as visualSpeed climbs toward c.
-    const trailFrac = this.visualSpeed <= 0 ? 0 : 0.06 + 0.18 * this.visualSpeed;
+    // No trail at rest, growing toward the max as visualSpeed climbs toward c.
+    // The "just started moving" floor (0.06) ramps in over visualSpeed's own
+    // low range rather than snapping on at any positive value, so the trail
+    // fades in/out smoothly with visualSpeed's easing instead of popping.
+    const rampIn = Math.min(1, this.visualSpeed / 0.08);
+    const trailFrac = rampIn * 0.06 + 0.18 * this.visualSpeed;
     const trailLen = this.width * trailFrac;
     const hist = this.trailHistory;
     if (trailLen > 0 && hist.length > 1) {
