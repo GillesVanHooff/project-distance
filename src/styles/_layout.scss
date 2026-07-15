@@ -1,0 +1,26 @@
+@use 'variables' as *;
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 20px;
+}
+
+.app__grid {
+  display: grid;
+  grid-template-columns: $col-shop 1fr $col-progress;
+  gap: $gap;
+  width: 100%;
+  max-width: 1560px;
+  min-width: 1280px;
+  min-height: 860px;
+}
+
+.panel {
+  background: $bg-panel;
+  border: 1px solid $border-panel;
+  border-radius: $radius-panel;
+  overflow: hidden;
+}

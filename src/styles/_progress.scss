@@ -1,0 +1,157 @@
+@use 'variables' as *;
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 16px;
+}
+
+.progress__label {
+  font-family: $font-mono;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: $text-faint;
+}
+
+.progress__milestone-name {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.progress__milestone-meta {
+  margin-top: 4px;
+  font-family: $font-mono;
+  font-size: 12.5px;
+  color: $text-muted;
+
+  .boost {
+    color: $accent-blue-light;
+  }
+}
+
+.progress__bar {
+  margin-top: 10px;
+  height: 5px;
+  background: $tab-bg;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress__bar-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, $green-dark, $green-bright);
+  border-radius: 3px;
+  transition: width 0.2s ease-out;
+}
+
+.progress__bar-pct {
+  margin-top: 6px;
+  font-family: $font-mono;
+  font-size: 11px;
+  color: $text-faint;
+  text-align: right;
+}
+
+.progress__divider {
+  height: 1px;
+  background: $border-panel;
+  margin: 16px 0;
+}
+
+.progress__recent {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.progress__recent-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.progress__recent-check {
+  color: $green-bright;
+  font-family: $font-mono;
+  font-size: 12px;
+}
+
+.progress__recent-name {
+  color: $text-secondary;
+}
+
+.progress__recent-fill {
+  flex: 1;
+  border-bottom: 1px dotted #232a38;
+}
+
+.progress__recent-dist {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-dim;
+}
+
+.progress__stats {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.progress__stat-row {
+  display: flex;
+  justify-content: space-between;
+
+  span:first-child {
+    color: $text-dim;
+  }
+
+  span:last-child {
+    font-family: $font-mono;
+    color: $text-secondary;
+  }
+}
+
+.progress__spacer {
+  flex: 1;
+}
+
+.progress__prestige {
+  border: 1px dashed $border-locked-dashed;
+  border-radius: 9px;
+  padding: 12px;
+  text-align: center;
+  color: $text-veryfaint;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  em {
+    font-family: $font-mono;
+    font-style: italic;
+  }
+
+  &--ready {
+    cursor: pointer;
+    border: 1px solid $accent-blue-border;
+    background: $accent-blue-bg;
+    color: $accent-blue-light;
+    box-shadow:
+      0 0 12px rgba(76, 141, 255, 0.18) inset,
+      0 0 10px rgba(76, 141, 255, 0.1);
+
+    &:hover {
+      background: $accent-blue-bg-hover;
+      color: $accent-blue-lighter;
+    }
+  }
+}

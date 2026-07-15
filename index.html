@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Distance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <div class="app__grid">
+        <!-- ============ LEFT: SHOP ============ -->
+        <aside class="panel shop" data-screen-label="Shop">
+          <div class="shop__tabs">
+            <button class="shop__tab is-active" data-tab="generators" type="button">Generators</button>
+            <button class="shop__tab" data-tab="upgrades" type="button">Upgrades</button>
+            <button class="shop__tab shop__tab--locked" data-tab="photon" type="button" disabled>
+              <span id="photon-tab-icon">⊘</span>
+            </button>
+          </div>
+          <div class="shop__divider"></div>
+          <div class="shop__list" id="shop-list"></div>
+        </aside>
+
+        <!-- ============ CENTER: STAGE ============ -->
+        <main class="panel stage" data-screen-label="Stage">
+          <div class="stage__odometer">
+            <div class="stage__distance">
+              <span id="distance-value">0</span><span class="stage__unit" id="distance-unit">ℓₚ</span>
+            </div>
+            <div class="stage__comparison" id="distance-comparison">&nbsp;</div>
+            <div class="stage__energy-row">
+              <div class="stage__energy">
+                <span class="stage__energy-icon">⚡</span>
+                <span class="stage__energy-value" id="energy-value">0</span>
+                <span class="stage__energy-label">energy</span>
+              </div>
+              <div class="stage__income" id="energy-income">+0/s</div>
+            </div>
+          </div>
+
+          <div class="stage__scene" id="scene">
+            <canvas id="scene-canvas"></canvas>
+
+            <div class="stage__scene-header">
+              <div class="stage__speed">Speed: <span id="speed-value">0</span></div>
+              <div class="stage__percent-c" id="percent-c-wrap">
+                <span id="percent-c-value">0</span>% of c
+              </div>
+            </div>
+            <div class="stage__speed-bar"><div class="stage__speed-bar-fill" id="speed-bar-fill"></div></div>
+
+            <div class="stage__click-hint" id="click-hint">Click to accelerate</div>
+          </div>
+        </main>
+
+        <!-- ============ RIGHT: PROGRESS & META ============ -->
+        <aside class="panel progress" data-screen-label="Progress">
+          <div class="progress__label">Next milestone</div>
+          <div class="progress__milestone-name" id="next-milestone-name">&mdash;</div>
+          <div class="progress__milestone-meta" id="next-milestone-meta">&nbsp;</div>
+          <div class="progress__bar"><div class="progress__bar-fill" id="milestone-bar-fill"></div></div>
+          <div class="progress__bar-pct" id="milestone-pct">0%</div>
+
+          <div class="progress__divider"></div>
+
+          <div class="progress__label">Recent</div>
+          <div class="progress__recent" id="recent-list"></div>
+
+          <div class="progress__divider"></div>
+
+          <div class="progress__label">Stats</div>
+          <div class="progress__stats">
+            <div class="progress__stat-row"><span>Lifetime</span><span id="stat-lifetime">0</span></div>
+            <div class="progress__stat-row"><span>Run time</span><span id="stat-runtime">0:00</span></div>
+            <div class="progress__stat-row"><span>Total clicks</span><span id="stat-clicks">0</span></div>
+          </div>
+
+          <div class="progress__spacer"></div>
+
+          <div class="progress__prestige" id="prestige-panel">
+            <span class="progress__lock-icon" id="prestige-icon">🔒</span>
+            <span id="prestige-text">Prestige &mdash; reach <em>c</em></span>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

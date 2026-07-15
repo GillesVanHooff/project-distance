@@ -1,0 +1,163 @@
+@use 'variables' as *;
+
+.stage {
+  display: flex;
+  flex-direction: column;
+}
+
+.stage__odometer {
+  text-align: center;
+  padding: 30px 20px 18px 20px;
+}
+
+.stage__distance {
+  font-family: $font-mono;
+  font-size: 64px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: $text-primary;
+  text-shadow: 0 0 32px rgba(76, 141, 255, 0.14);
+}
+
+.stage__unit {
+  font-size: 34px;
+  color: $text-muted;
+  font-weight: 500;
+  margin-left: 10px;
+}
+
+.stage__comparison {
+  margin-top: 10px;
+  font-size: 15px;
+  color: $text-muted;
+}
+
+.stage__energy-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 22px 18px 22px;
+  margin-top: 8px;
+  border-top: 1px solid $border-header-thin;
+}
+
+.stage__energy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stage__energy-icon {
+  color: $accent-blue-light;
+  font-size: 15px;
+}
+
+.stage__energy-value {
+  font-family: $font-mono;
+  font-size: 17px;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.stage__energy-label {
+  font-size: 13px;
+  color: $text-dim;
+}
+
+.stage__income {
+  font-family: $font-mono;
+  font-size: 13px;
+  color: $green;
+}
+
+.stage__scene {
+  flex: 1;
+  margin: 0 22px 22px 22px;
+  position: relative;
+  background: #05070a;
+  border: 1px solid #161b25;
+  border-radius: $radius-card;
+  overflow: hidden;
+  cursor: pointer;
+  min-height: 340px;
+}
+
+#scene-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.stage__scene-header {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 16px 22px 0 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: $font-mono;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.stage__speed {
+  color: $text-secondary;
+
+  span {
+    color: $text-body;
+    font-weight: 600;
+  }
+}
+
+.stage__percent-c {
+  color: $text-dim;
+
+  span {
+    color: $accent-blue-light;
+  }
+
+  &.is-hidden {
+    visibility: hidden;
+  }
+}
+
+.stage__speed-bar {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 46px;
+  height: 5px;
+  background: $tab-bg;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stage__speed-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, $accent-blue-dark, $accent-blue);
+  border-radius: 3px;
+  box-shadow: 0 0 8px rgba(76, 141, 255, 0.6);
+  transition: width 0.2s ease-out;
+}
+
+.stage__click-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: $text-faint;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+.stage__click-hint.is-hidden {
+  opacity: 0;
+}

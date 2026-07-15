@@ -1,0 +1,60 @@
+// Color palette extracted from the design source (Project Distance (design).html).
+
+// Page / panels
+$bg-page: #07090d;
+$bg-panel: #0c0f15;
+$border-panel: #1a1f2a;
+$border-header-thin: #131824;
+
+// Cards (shop rows)
+$bg-card: #10141d;
+$border-card-affordable: #24304a;
+$bg-card-dim: #0d1017;
+$border-card-dim: #171c26;
+$border-locked-dashed: #1b212c;
+
+// Tabs
+$tab-bg: #131824;
+$border-tab: #222a3a;
+
+// Text
+$text-primary: #f2f5fa;
+$text-body: #e6eaf2;
+$text-secondary: #a9b1c2;
+$text-muted: #7c87a0;
+$text-dim: #5a6478;
+$text-faint: #4a5468;
+$text-locked: #454e60;
+$text-veryfaint: #3a4254;
+$text-label: #333b4c;
+
+// Accent blue (active/spendable/particle)
+$accent-blue: #4c8dff;
+$accent-blue-light: #8fb5ff;
+$accent-blue-lighter: #9fc2ff;
+$accent-blue-dark: #2e63c9;
+$accent-blue-bg: #16233d;
+$accent-blue-bg-hover: #1b2b4c;
+$accent-blue-border: #3b66b8;
+$link-blue: #5c93ff;
+$link-blue-hover: #85afff;
+
+// Green (positive / income / milestones reached)
+$green-bright: #4cc97e;
+$green: #6fcf97;
+$green-dark: #2e9e5b;
+
+// Grid line on the particle scene
+$grid-line: rgba(124, 135, 160, 0.05);
+
+// Fonts
+$font-body: 'Space Grotesk', sans-serif;
+$font-mono: 'IBM Plex Mono', monospace;
+
+// Layout
+$col-shop: 300px;
+$col-progress: 312px;
+$gap: 16px;
+$radius-panel: 12px;
+$radius-card: 10px;
+$radius-control: 7px;

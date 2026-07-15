@@ -1,0 +1,31 @@
+@use 'variables' as *;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: $bg-page;
+  height: 100%;
+}
+
+body {
+  font-family: $font-body;
+  color: $text-body;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mono {
+  font-family: $font-mono;
+}
