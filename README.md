@@ -1,6 +1,6 @@
 # Project Distance
 
-An idle/incremental browser game where the resource is **distance**. You are a particle. You start by moving one Planck length at a time, and your journey ends — eventually — at the edge of the observable universe, 46.5 billion light years away. That's 61 orders of magnitude of progress, all of it grounded in real physical scale.
+An idle/incremental browser game where the resource is **distance**. You are a particle. You start by moving one Planck length at a time, and your journey ends, eventually, at the edge of the observable universe, 46.5 billion light years away. That's 61 orders of magnitude of progress, all of it grounded in real physical scale.
 
 ## Core loop
 
@@ -31,7 +31,7 @@ Early development. Design is documented in `CLAUDE.md`, which is the source of t
 - Browser game, plain TypeScript/JS (no engine needed — the game loop is a tick function).
 - **break_infinity.js** for big numbers from day one (light speed alone is ~1.8×10⁴³ ℓₚ/s; JS native numbers die at ~9×10¹⁵).
 - Save: auto-save to localStorage + manual export/import.
-- Offline progress: expected by the genre — decision pending on full vs. partial credit.
+- Offline progress: full.
 - Balance is tuned with a headless simulator script (greedy auto-buyer, prints time-to-c), not by hand-playing.
 
 ## License
