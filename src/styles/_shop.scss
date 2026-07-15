@@ -61,6 +61,26 @@
   padding: 14px 12px;
   flex: 1;
   overflow-y: auto;
+
+  scrollbar-width: thin;
+  scrollbar-color: $border-tab transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: $border-tab;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: $text-faint;
+  }
 }
 
 .shop__footer-label {
