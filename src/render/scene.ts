@@ -9,6 +9,8 @@
 import { formatMagnitude } from '../core/units';
 
 interface RulerInput {
+  /** Symbol of the unit distanceInUnit/speedInUnitPerSec are expressed in (e.g. "nm", "km"). */
+  symbol: string;
   /** Current distance in whatever unit the odometer is displaying right now. */
   distanceInUnit: number;
   /** Current speed in that same unit, per second. */
@@ -168,6 +170,7 @@ export class ParticleScene {
   // distance/unit each frame; only the tick *step size* needs smoothing, so it
   // doesn't relabel every frame as speed jitters.
   private rulerDistance = 0;
+  private rulerUnit = '';
   private smoothedTickSpeed = 0;
   private tickStep: NiceStep = { exp: 0, value: 1 };
   private tickStepAge = 999; // large: no fade-in flash on first paint
@@ -236,10 +239,23 @@ export class ParticleScene {
     this.scrollPx += dt * (20 + this.visualSpeed * 320);
 
     this.rulerDistance = ruler.distanceInUnit;
-    // Smooth the speed feeding the tick-step choice (not tick position — that
-    // tracks the real distance exactly) so the step size doesn't relabel on
-    // every small speed fluctuation.
-    this.smoothedTickSpeed += (Math.max(0, ruler.speedInUnitPerSec) - this.smoothedTickSpeed) * Math.min(1, dt * 0.8);
+    // The odometer's display unit is a discrete ladder (nm/µm/mm/...), not a
+    // continuous scale — distanceInUnit/speedInUnitPerSec jump to a wholly
+    // different magnitude the instant the unit switches (e.g. 999nm -> 1.00µm).
+    // Blending the old unit's step size toward the new one over time (as the
+    // steady-state smoothing below does) drags the ticks through a stretch of
+    // mismatched-magnitude layouts, which reads as glitchy jitter. Snap the
+    // smoothing hard on a unit change instead, so it becomes one clean
+    // recalibration (fade handled below) rather than a slow melt.
+    if (ruler.symbol !== this.rulerUnit) {
+      this.rulerUnit = ruler.symbol;
+      this.smoothedTickSpeed = Math.max(0, ruler.speedInUnitPerSec);
+    } else {
+      // Smooth the speed feeding the tick-step choice (not tick position —
+      // that tracks the real distance exactly) so the step size doesn't
+      // relabel on every small speed fluctuation.
+      this.smoothedTickSpeed += (Math.max(0, ruler.speedInUnitPerSec) - this.smoothedTickSpeed) * Math.min(1, dt * 0.8);
+    }
     if (this.smoothedTickSpeed > 0) {
       const candidate = niceStep(this.smoothedTickSpeed * ParticleScene.RULER_TEMPO_SECONDS);
       if (candidate.value !== this.tickStep.value) {
@@ -415,6 +431,17 @@ export class ParticleScene {
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
+
+    // Unit-of-measurement legend, pinned to the ruler's bottom-right corner —
+    // a glance tells you the scale the tick numbers above are in, without
+    // reading the odometer. Persistent (no tick-fade tie-in): it should stay
+    // legible exactly when the grid is mid-recalibration and least self-explanatory.
+    if (this.rulerUnit) {
+      ctx.font = '600 12px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(220,228,242,0.6)';
+      ctx.fillText(this.rulerUnit, this.width - 12, this.height - 10);
+    }
   }
 
   private drawParticle(p: EraPalette): void {

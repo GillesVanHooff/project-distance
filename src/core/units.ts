@@ -2,8 +2,10 @@ import { D, Decimal } from './decimal';
 import {
   PLANCK_METERS,
   METERS_PER_AU,
+  METERS_PER_KM,
   METERS_PER_LIGHT_DAY,
   METERS_PER_LIGHT_YEAR,
+  C_METERS_PER_SEC,
   C_PLANCK_PER_SEC,
 } from './constants';
 
@@ -153,6 +155,16 @@ export function formatDistanceStr(planck: Decimal): string {
 
 /** Format a speed in ℓₚ/s using the distance ladder. */
 export function formatSpeed(planckPerSec: Decimal): string {
+  const meters = planckPerSec.mul(PLANCK_METERS);
+  // Once travel is fast enough to read in km/s, stay pinned there all the way
+  // to c (~300,000 km/s) instead of collapsing into an abstract "162K km/s" —
+  // a plain, fully-written kilometers-per-second number reads as a more
+  // visceral pace than a suffixed magnitude. Bounded to <= c: production
+  // figures elsewhere (e.g. the shop's per-generator rate) can run far beyond
+  // that and still want the full unit ladder + suffixes for readability.
+  if (meters.gte(METERS_PER_KM) && meters.lte(C_METERS_PER_SEC)) {
+    return `${to3Sig(meters.div(METERS_PER_KM).toNumber())} km/s`;
+  }
   return `${formatDistanceStr(planckPerSec)}/s`;
 }
 

@@ -23,6 +23,8 @@ export interface UiRefs {
   statLifetime: HTMLElement;
   statRuntime: HTMLElement;
   statClicks: HTMLElement;
+  statPrestigeCount: HTMLElement;
+  statPrestigeMult: HTMLElement;
   prestigePanel: HTMLElement;
   prestigeIcon: HTMLElement;
   prestigeText: HTMLElement;
@@ -60,6 +62,8 @@ export function queryRefs(): UiRefs {
     statLifetime: req('stat-lifetime'),
     statRuntime: req('stat-runtime'),
     statClicks: req('stat-clicks'),
+    statPrestigeCount: req('stat-prestige-count'),
+    statPrestigeMult: req('stat-prestige-mult'),
     prestigePanel: req('prestige-panel'),
     prestigeIcon: req('prestige-icon'),
     prestigeText: req('prestige-text'),

@@ -34,6 +34,13 @@ import { upgradeLevel, type GameState } from './state';
 // Production
 // ---------------------------------------------------------------------------
 
+/** Passive speed multiplier from lifetime-earned Time Crystals (CRYSTAL_SPEED_BONUS per crystal,
+ * never reduced by spending — see CLAUDE.md's hybrid crystal model). Exposed on its own so the
+ * progress panel can show "the prestige multiplier" without re-deriving it from globalMultiplier. */
+export function crystalSpeedMultiplier(state: GameState): Decimal {
+  return ONE.add(state.crystalsLifetime.mul(CRYSTAL_SPEED_BONUS));
+}
+
 /** Global multiplier applied to all production: milestones, one-time upgrades, photon, crystals. */
 export function globalMultiplier(state: GameState): Decimal {
   let mult = D(2).pow(milestonesReached(state.currencies.distanceRun));
@@ -42,7 +49,7 @@ export function globalMultiplier(state: GameState): Decimal {
   }
   const photon = upgradeLevel(state, 'photon');
   if (photon > 0) mult = mult.mul(D(PHOTON_MULT).pow(photon));
-  mult = mult.mul(ONE.add(state.crystalsLifetime.mul(CRYSTAL_SPEED_BONUS)));
+  mult = mult.mul(crystalSpeedMultiplier(state));
   return mult;
 }
 

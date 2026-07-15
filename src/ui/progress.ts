@@ -1,5 +1,5 @@
 import { D, ZERO } from '../core/decimal';
-import { canPrestige, crystalsOnPrestige } from '../core/logic';
+import { canPrestige, crystalSpeedMultiplier, crystalsOnPrestige } from '../core/logic';
 import { lastMilestone, MILESTONES, nextMilestone, type MilestoneDef } from '../core/milestones';
 import type { GameState } from '../core/state';
 import { formatDistanceStr, formatDuration, formatNumber } from '../core/units';
@@ -53,6 +53,8 @@ export function updateProgress(state: GameState, refs: UiRefs, recentLog: Milest
   refs.statLifetime.textContent = formatDistanceStr(state.currencies.distanceLifetime);
   refs.statRuntime.textContent = formatDuration(state.runTimeSec);
   refs.statClicks.textContent = formatNumber(D(state.totalClicks));
+  refs.statPrestigeCount.textContent = String(state.prestigeCount);
+  refs.statPrestigeMult.textContent = `×${formatNumber(crystalSpeedMultiplier(state))}`;
 
   const ready = canPrestige(state);
   refs.prestigePanel.classList.toggle('progress__prestige--ready', ready);
