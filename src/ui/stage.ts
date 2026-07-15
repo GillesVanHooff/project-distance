@@ -36,7 +36,7 @@ export interface StageFrame {
 export function updateStage(state: GameState, refs: UiRefs): StageFrame {
   const { value, symbol, raw } = formatDistance(state.currencies.distanceRun);
   refs.distanceValue.textContent = value;
-  refs.distanceUnit.textContent = symbol;
+  refs.distanceUnit.textContent = symbol === 'ℓₚ' ? 'Planck Lengths' : symbol;
 
   const last = lastMilestone(state.currencies.distanceRun);
   refs.distanceComparison.textContent = last ? `farther than ${last.name}` : '';
