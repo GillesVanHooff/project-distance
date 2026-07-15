@@ -70,7 +70,11 @@ function main(): void {
     });
   }
 
-  refs.shopList.addEventListener('click', (e) => {
+  // Buy on pointerdown, not click: renderShop rebuilds shopList.innerHTML every
+  // UI_REFRESH_INTERVAL_MS, so a held-down press can outlive the button node a
+  // 'click' would need at release time, silently swallowing the purchase.
+  refs.shopList.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
     if (!btn || btn.disabled) return;
     if (btn.dataset['action'] === 'buy-generator') {

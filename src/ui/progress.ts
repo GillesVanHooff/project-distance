@@ -54,6 +54,7 @@ export function updateProgress(state: GameState, refs: UiRefs, recentLog: Milest
   refs.statRuntime.textContent = formatDuration(state.runTimeSec);
   refs.statClicks.textContent = formatNumber(D(state.totalClicks));
   refs.statPrestigeCount.textContent = String(state.prestigeCount);
+  refs.statCrystals.textContent = formatNumber(state.currencies.crystals);
   refs.statPrestigeMult.textContent = `×${formatNumber(crystalSpeedMultiplier(state))}`;
 
   const ready = canPrestige(state);
