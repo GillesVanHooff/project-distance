@@ -1,3 +1,4 @@
+import { CLICK_RATE_CAP } from '../core/constants';
 import { PERCENT_C_UNLOCK } from '../core/content';
 import { distanceRate, generatorSpeed, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
@@ -33,6 +34,10 @@ export interface RulerReading {
 
 export interface StageFrame {
   visualFraction: number;
+  /** Current clicks/sec relative to CLICK_RATE_CAP (>1 past the cap) — drives
+   * the scene trail's click-reactive flare, separately from visualFraction's
+   * heavily log-compressed overall speed level (see ParticleScene.update). */
+  clickIntensity: number;
   ruler: RulerReading;
 }
 
@@ -66,7 +71,13 @@ export function updateStage(state: GameState, refs: UiRefs): StageFrame {
   // reflows the scale bar's step size, reading as a continuous "zoom" jitter.
   const speedInUnitPerSec = toUnitScale(generatorSpeed(state), scale);
 
-  return { visualFraction: fraction, ruler: { symbol, distanceInUnit: raw, speedInUnitPerSec } };
+  const clickIntensity = state.clickRate / CLICK_RATE_CAP;
+
+  return {
+    visualFraction: fraction,
+    clickIntensity,
+    ruler: { symbol, distanceInUnit: raw, speedInUnitPerSec },
+  };
 }
 
 export function hideClickHint(refs: UiRefs): void {

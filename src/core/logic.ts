@@ -5,10 +5,10 @@ import {
   BURST_DURATION_SEC,
   BURST_MULTIPLIER,
   CLICK_BASE_FLAT,
-  CLICK_COMBO_BUILD_PER_CLICK,
-  CLICK_COMBO_DECAY_PER_SEC,
   CLICK_OVERFLOW_FACTOR,
   CLICK_RATE_CAP,
+  CLICK_RATE_DECAY,
+  CLICK_RATE_IMPULSE,
   C_PLANCK_PER_SEC,
   CRYSTAL_SPEED_BONUS,
   GENERATOR_COST_GROWTH,
@@ -76,12 +76,17 @@ export function generatorSpeed(state: GameState): Decimal {
   return Decimal.min(rawSpeed(state), C_PLANCK_PER_SEC);
 }
 
-/** Extra speed from the click combo charge (see CLICK_COMBO_* in constants.ts):
- * scales with the player's current flat click value, so it stays in step with
- * click upgrades and is 0 the instant clicking stops long enough to decay. */
+/** Extra speed from the click combo (see CLICK_RATE_* in constants.ts): scales
+ * continuously with the player's live measured clicks/sec, up to CLICK_RATE_CAP,
+ * then softens past it via CLICK_OVERFLOW_FACTOR — same shape as click value's
+ * own diminishing returns, so 2 cps and 5 cps produce visibly different combo
+ * speed instead of both maxing out. Scales with flatClickValue so it stays in
+ * step with click upgrades and is 0 the instant clicking stops long enough to decay. */
 export function comboSpeed(state: GameState): Decimal {
-  if (state.clickCombo <= 0) return ZERO;
-  return flatClickValue(state).mul(state.clickCombo * CLICK_RATE_CAP);
+  if (state.clickRate <= 0) return ZERO;
+  const withinCap = Math.min(state.clickRate, CLICK_RATE_CAP);
+  const overflow = Math.max(0, state.clickRate - CLICK_RATE_CAP);
+  return flatClickValue(state).mul(withinCap + overflow * CLICK_OVERFLOW_FACTOR);
 }
 
 /** Actual speed: generator speed plus click combo, capped at c. This is what
@@ -162,7 +167,7 @@ export function click(state: GameState): Decimal {
   if (state.burstActiveSec > 0) value = value.mul(BURST_MULTIPLIER);
   gainDistance(state, value);
   state.totalClicks += 1;
-  state.clickCombo = Math.min(1, state.clickCombo + CLICK_COMBO_BUILD_PER_CLICK);
+  state.clickRate += CLICK_RATE_IMPULSE;
   return value;
 }
 
@@ -186,7 +191,7 @@ export function tick(state: GameState, dt: number): void {
     state.burstCooldownSec = Math.max(0, state.burstCooldownSec - dt);
   }
   state.clickBucket = Math.min(CLICK_RATE_CAP, state.clickBucket + CLICK_RATE_CAP * dt);
-  state.clickCombo = Math.max(0, state.clickCombo - CLICK_COMBO_DECAY_PER_SEC * dt);
+  state.clickRate *= Math.exp(-CLICK_RATE_DECAY * dt);
 }
 
 // ---------------------------------------------------------------------------

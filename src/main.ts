@@ -172,9 +172,9 @@ function main(): void {
     const dt = Math.min(0.25, (now - lastFrame) / 1000);
     lastFrame = now;
 
-    const { visualFraction, ruler } = updateStage(state, refs);
+    const { visualFraction, clickIntensity, ruler } = updateStage(state, refs);
     scene.setEra(ruler.symbol);
-    scene.update(dt, visualFraction, ruler);
+    scene.update(dt, visualFraction, clickIntensity, ruler);
     scene.draw();
 
     requestAnimationFrame(frame);

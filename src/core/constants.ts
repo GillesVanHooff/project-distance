@@ -50,15 +50,22 @@ export const CLICK_RATE_CAP = 5;
 export const CLICK_OVERFLOW_FACTOR = 0.15;
 
 /**
- * Click combo: sustained clicking ramps a 0..1 charge (see clickCombo() in
- * logic.ts) that adds real, visible speed — this is what makes the speed
- * stat move before Generator 1 exists, per CLAUDE.md rule 3's
- * "buff-with-duration" active-play bonus. Builds fast (a few clicks fills
- * it), decays fast (~1.25s of no clicking empties it), so it reads as
- * momentum from continuous clicking rather than a permanent gain.
+ * Click combo: state.clickRate is a live clicks/sec estimate — a leaky-bucket
+ * rate meter (each click adds CLICK_RATE_IMPULSE, every tick multiplies by
+ * exp(-CLICK_RATE_DECAY * dt)) — which comboSpeed() turns into real, visible
+ * speed. This is what makes the speed stat move before Generator 1 exists, per
+ * CLAUDE.md rule 3's "buff-with-duration" active-play bonus. Unlike a
+ * saturating charge, this scales continuously with actual click rate (its
+ * steady-state value for sustained rate f converges toward f as f grows) all
+ * the way to CLICK_RATE_CAP — so 2 cps and 5 cps read as visibly different,
+ * not identical — then softens past the cap via CLICK_OVERFLOW_FACTOR, same
+ * as click value's own diminishing returns. A single exponential decay
+ * (rather than a separate EMA-blend-plus-linear-decay) keeps the rate
+ * estimate monotonic in click rate with no threshold discontinuities.
+ * CLICK_RATE_DECAY = 1 empties the estimate to ~5% within ~3s of no clicking.
  */
-export const CLICK_COMBO_BUILD_PER_CLICK = 0.4;
-export const CLICK_COMBO_DECAY_PER_SEC = 0.8;
+export const CLICK_RATE_IMPULSE = 1;
+export const CLICK_RATE_DECAY = 1;
 
 /** Burst active ability: clicks are boosted for a duration, then a cooldown. */
 export const BURST_MULTIPLIER = 4;

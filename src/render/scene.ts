@@ -153,6 +153,12 @@ export class ParticleScene {
   private ripples: Ripple[] = [];
   private scrollPx = 0;
   private visualSpeed = 0;
+  // Eased copy of the click-intensity reading (clicks/sec relative to the
+  // cap) — see drawParticle()'s trail boost. Kept separate from visualSpeed
+  // because visualSpeed is log-compressed across 43 orders of magnitude, so a
+  // 2x-5x change in click rate barely moves it; clickIntensity gives the
+  // trail a signal that actually reacts to that.
+  private clickIntensity = 0;
   private palette: EraPalette = ERA_PALETTES[1]!;
   private time = 0;
   // Random-walk jitter layered on top of idle sine motion — retargets itself
@@ -264,14 +270,17 @@ export class ParticleScene {
   }
 
   /** speedFraction: 0..1 visual intensity (log-mapped by the caller — see ui/stage.ts).
+   * clickIntensity: current clicks/sec relative to the cap (see ui/stage.ts) — drives
+   * the trail's click-reactive flare independent of speedFraction's log compression.
    * ruler: real distance/speed in the odometer's current unit, for truthful tick labels. */
-  update(dt: number, speedFraction: number, ruler: RulerInput): void {
+  update(dt: number, speedFraction: number, clickIntensity: number, ruler: RulerInput): void {
     this.time += dt;
     this.visualSpeed += (speedFraction - this.visualSpeed) * Math.min(1, dt * 2.5);
     // Exponential easing asymptotically approaches the target but never quite
     // reaches it — left alone, a trail floor further down (drawParticle) would
     // never fully clear after the particle has ever moved. Snap once close.
     if (Math.abs(speedFraction - this.visualSpeed) < 0.001) this.visualSpeed = speedFraction;
+    this.clickIntensity += (clickIntensity - this.clickIntensity) * Math.min(1, dt * 3);
     this.scrollPx += dt * (20 + this.visualSpeed * 320);
 
     this.rulerDistance = ruler.distanceInUnit;
@@ -515,13 +524,27 @@ export class ParticleScene {
     const py = this.height * 0.42;
     const bob = this.bob;
 
-    // No trail at rest, growing toward the max as visualSpeed climbs toward c.
-    // The "just started moving" floor (0.06) ramps in over visualSpeed's own
-    // low range rather than snapping on at any positive value, so the trail
-    // fades in/out smoothly with visualSpeed's easing instead of popping.
+    // No trail at rest, growing toward a longer max (~0.30 of width, up from
+    // ~0.24) as visualSpeed climbs toward c. The "just started moving" floor
+    // (0.08) ramps in over visualSpeed's own low range rather than snapping on
+    // at any positive value, so the trail fades in/out smoothly with
+    // visualSpeed's easing instead of popping.
     const rampIn = Math.min(1, this.visualSpeed / 0.08);
-    const trailFrac = rampIn * 0.06 + 0.18 * this.visualSpeed;
-    const trailLen = this.width * trailFrac;
+    const baseFrac = rampIn * 0.08 + 0.22 * this.visualSpeed;
+    // Click-reactive flare: driven by actual clicks/sec (see clickIntensity),
+    // not visualSpeed — visualSpeed is log-compressed across 43 orders of
+    // magnitude, so a 2x-5x click-rate change barely moves it, and a boost
+    // derived from visualSpeed's own trend would (and did) misfire during
+    // ordinary early-game growth, flaring even with no clicking at all.
+    // clickIntensity is 0 whenever the player isn't actively clicking, so
+    // this term only ever adds length while — and briefly after — clicking.
+    const clickBoost = Math.min(0.2, this.clickIntensity * 0.12);
+    const trailFrac = baseFrac + clickBoost;
+    // Hard safety clamp in pixel space, tied to the particle's own x position
+    // rather than stage width: guarantees the trail's start point always
+    // stays right of the canvas edge with margin to spare, regardless of how
+    // baseFrac/clickBoost get tuned later.
+    const trailLen = Math.min(this.width * trailFrac, this.particleX * 0.85);
     const hist = this.trailHistory;
     if (trailLen > 0 && hist.length > 1) {
       const n = hist.length;
