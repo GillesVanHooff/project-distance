@@ -42,9 +42,10 @@ interface FloatingText {
 }
 
 interface Ripple {
-  x: number;
-  y: number;
   age: number;
+  /** Particle radius at the moment this ripple spawned — it grows outward
+   * from here so it starts right at the particle's border, not its center. */
+  startRadius: number;
 }
 
 interface Streak {
@@ -154,17 +155,27 @@ export class ParticleScene {
   private visualSpeed = 0;
   private palette: EraPalette = ERA_PALETTES[1]!;
   private time = 0;
-  // Random-walk vertical jitter layered on top of the idle sine bob — retargets
-  // itself at an interval and amplitude that both shrink as visualSpeed rises,
-  // so the particle reads as increasingly erratic (not just faster).
+  // Random-walk jitter layered on top of idle sine motion — retargets itself
+  // at an interval/amplitude that grow with visualSpeed, so the particle
+  // reads as increasingly erratic (not just faster) the closer it gets to c.
+  // Vertical is the dominant axis; horizontal uses much smaller amplitudes
+  // throughout so left/right drift always stays subtle.
   private wobbleY = 0;
-  private wobbleTarget = 0;
-  private wobbleTimer = 0;
+  private wobbleTargetY = 0;
+  private wobbleTimerY = 0;
+  private wobbleX = 0;
+  private wobbleTargetX = 0;
+  private wobbleTimerX = 0;
   private bob = 0;
+  private bobX = 0;
   // Recent bob samples (oldest first), used to draw the trail as a curve that
   // traces the particle's actual up/down path instead of a flat line.
   private readonly trailHistory: number[] = [];
   private static readonly TRAIL_SAMPLES = 24;
+  // Per-click grow-then-shrink punch: snaps to 1 on click, exponentially
+  // decays back to 0 — reused both as the particle's radius bump and as the
+  // ripple's growth curve so the two visually agree.
+  private pulse = 0;
 
   // Ruler state — see drawRuler(). Position comes straight from the real
   // distance/unit each frame; only the tick *step size* needs smoothing, so it
@@ -213,18 +224,43 @@ export class ParticleScene {
     this.palette = ERA_PALETTES[idx]!;
   }
 
-  /** Spawn a click ripple + floating label at a client-space point (e.g. from a MouseEvent). */
+  /** Spawn a floating label at a client-space point (e.g. from a MouseEvent), and
+   * punch the particle — the ripple emanates from the particle itself, not the
+   * click position, so it isn't positioned here. */
   addClickEffect(clientX: number, clientY: number, label: string): void {
     const rect = this.canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     this.floating.push({ x, y, text: label, age: 0 });
-    this.ripples.push({ x, y, age: 0 });
+    this.pulse = 1;
+    this.ripples.push({ age: 0, startRadius: this.particleRadius() });
   }
 
-  /** Horizontal anchor the particle sits at — also where the ruler's "you are here" cursor lands. */
+  /** Horizontal anchor the particle sits at — also where the ruler's "you are here"
+   * cursor lands. Deliberately excludes the left/right jitter (bobX): that jitter is
+   * a purely cosmetic wobble on the particle sprite, not real motion, so it must not
+   * leak into the ruler's position reading. */
   private get particleX(): number {
     return this.width * 0.35;
+  }
+
+  /** Horizontal position the particle *sprite* is actually drawn at, jitter included —
+   * used for the particle itself and effects (ripples) anchored to it, never for the ruler. */
+  private get particleVisualX(): number {
+    return this.particleX + this.bobX;
+  }
+
+  /** Vertical position the particle sits at right now, bob included — ripples
+   * are drawn here every frame so they track the particle as it bobs. */
+  private get particleY(): number {
+    return this.height * 0.42 + this.bob;
+  }
+
+  /** Current on-screen radius of the particle core (speed growth + click pulse
+   * bump) — shared by drawParticle and ripple spawning so a ripple's starting
+   * edge always matches the particle's actual drawn border. */
+  private particleRadius(): number {
+    return (11 + Math.min(6, this.visualSpeed * 6)) * 1.1 + this.pulse * 10;
   }
 
   /** speedFraction: 0..1 visual intensity (log-mapped by the caller — see ui/stage.ts).
@@ -265,20 +301,39 @@ export class ParticleScene {
     }
     this.tickStepAge += dt;
 
-    this.wobbleTimer -= dt;
-    if (this.wobbleTimer <= 0) {
-      const amplitude = 3 + this.visualSpeed * 16;
-      this.wobbleTarget = (Math.random() * 2 - 1) * amplitude;
-      this.wobbleTimer = 0.4 - this.visualSpeed * 0.3 + Math.random() * 0.2;
+    this.wobbleTimerY -= dt;
+    if (this.wobbleTimerY <= 0) {
+      // Idle amplitude kept modest (2) and grows steeply with speed (×22) so
+      // the contrast between "at rest" and "near c" reads as a clear ramp-up.
+      const amplitude = 2 + this.visualSpeed * 22;
+      this.wobbleTargetY = (Math.random() * 2 - 1) * amplitude;
+      this.wobbleTimerY = 0.4 - this.visualSpeed * 0.3 + Math.random() * 0.2;
     }
     // Exponential (rather than linear) approach to the target — no overshoot,
     // reads as smoother easing instead of a snap-then-drift.
-    const wobbleRate = 3 + this.visualSpeed * 8;
-    this.wobbleY += (this.wobbleTarget - this.wobbleY) * (1 - Math.exp(-wobbleRate * dt));
+    const wobbleRateY = 3 + this.visualSpeed * 8;
+    this.wobbleY += (this.wobbleTargetY - this.wobbleY) * (1 - Math.exp(-wobbleRateY * dt));
 
-    this.bob = Math.sin(this.time * 1.6) * 3 + this.wobbleY;
+    // Horizontal counterpart — same random-walk shape, but its amplitude stays
+    // an order of magnitude smaller at every speed so left/right drift always
+    // reads as subtle, even as the vertical wobble gets wild near c.
+    this.wobbleTimerX -= dt;
+    if (this.wobbleTimerX <= 0) {
+      const amplitudeX = 1.2 + this.visualSpeed * 5;
+      this.wobbleTargetX = (Math.random() * 2 - 1) * amplitudeX;
+      this.wobbleTimerX = 0.6 - this.visualSpeed * 0.2 + Math.random() * 0.3;
+    }
+    const wobbleRateX = 2 + this.visualSpeed * 4;
+    this.wobbleX += (this.wobbleTargetX - this.wobbleX) * (1 - Math.exp(-wobbleRateX * dt));
+
+    this.bob = Math.sin(this.time * 1.6) * 2 + this.wobbleY;
+    this.bobX = Math.sin(this.time * 1.1 + 1.7) * 1 + this.wobbleX;
     this.trailHistory.push(this.bob);
     if (this.trailHistory.length > ParticleScene.TRAIL_SAMPLES) this.trailHistory.shift();
+
+    // Exponential decay — most of the punch is gone within ~250ms, reading
+    // as a snappy bounce rather than a lingering pulse.
+    this.pulse *= Math.exp(-dt * 11);
 
     for (const f of this.floating) f.age += dt;
     this.floating = this.floating.filter((f) => f.age < 1.4);
@@ -353,14 +408,12 @@ export class ParticleScene {
     // boundary, which otherwise anti-aliases them into a faint 2px smear.
     const rulerY = Math.round(this.height - 44) + 0.5;
 
-    ctx.strokeStyle = 'rgba(124,135,160,0.34)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, rulerY);
-    ctx.lineTo(this.width, rulerY);
-    ctx.stroke();
-
     const step = this.tickStep;
+    // Distance never goes negative (CLAUDE.md: "distance never decreases"),
+    // so nothing left of the real distance=0 point should ever be drawn —
+    // without this, the run's start reads as an arbitrary mid-tape position
+    // instead of a hard beginning.
+    let rulerLeftX = 0;
     if (step.value > 0) {
       const rawStep = this.smoothedTickSpeed * ParticleScene.RULER_TEMPO_SECONDS;
       // Stretch/compress slightly off the 140px target so the step's label
@@ -375,8 +428,13 @@ export class ParticleScene {
       const anchorValue = Math.floor(this.rulerDistance / step.value) * step.value;
       const frac = (this.rulerDistance - anchorValue) / step.value;
       const anchorX = this.particleX - frac * pxPerStep;
+      // anchorValue/step.value is always an integer by construction, so the
+      // tick-index of value 0 falls out exactly, no rounding involved.
+      const iZero = -Math.floor(this.rulerDistance / step.value) * minorPerMajor;
+      const zeroX = anchorX + iZero * minorPx;
+      rulerLeftX = Math.max(0, zeroX);
 
-      const iMin = Math.floor(-anchorX / minorPx) - 1;
+      const iMin = Math.max(Math.floor(-anchorX / minorPx) - 1, iZero);
       const iMax = Math.ceil((this.width - anchorX) / minorPx) + 1;
 
       // Fresh grid fades in over the transition so a step-size change (a
@@ -419,6 +477,13 @@ export class ParticleScene {
       ctx.globalAlpha = 1;
     }
 
+    ctx.strokeStyle = 'rgba(124,135,160,0.34)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(rulerLeftX, rulerY);
+    ctx.lineTo(this.width, rulerY);
+    ctx.stroke();
+
     // "You are here" cursor — pinned to the particle's x position, independent
     // of the tick grid, so it never jumps when the grid's step size reflows.
     ctx.fillStyle = p.particleMid;
@@ -446,7 +511,7 @@ export class ParticleScene {
 
   private drawParticle(p: EraPalette): void {
     const { ctx } = this;
-    const px = this.particleX;
+    const px = this.particleVisualX;
     const py = this.height * 0.42;
     const bob = this.bob;
 
@@ -488,7 +553,7 @@ export class ParticleScene {
       ctx.shadowBlur = 0;
     }
 
-    const r = (11 + Math.min(6, this.visualSpeed * 6)) * 1.1;
+    const r = this.particleRadius();
     const coreGrad = ctx.createRadialGradient(px - r * 0.25, py + bob - r * 0.25, 1, px, py + bob, r);
     coreGrad.addColorStop(0, p.particleCore);
     coreGrad.addColorStop(0.6, p.particleMid);
@@ -505,13 +570,18 @@ export class ParticleScene {
 
   private drawRipples(p: EraPalette): void {
     const { ctx } = this;
+    // Drawn at the particle's current (bobbing/jittering) position every
+    // frame, not a position captured at click time, so a ripple visibly
+    // tracks the particle for its whole lifetime instead of being left behind.
+    const x = this.particleVisualX;
+    const y = this.particleY;
     for (const rp of this.ripples) {
       const t = rp.age / 0.6;
-      ctx.globalAlpha = 1 - t;
+      ctx.globalAlpha = (1 - t) * 0.45;
       ctx.strokeStyle = p.particleMid;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(rp.x, rp.y, 6 + t * 34, 0, Math.PI * 2);
+      ctx.arc(x, y, rp.startRadius + t * 26, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
