@@ -24,7 +24,7 @@ export function updateProgress(state: GameState, refs: UiRefs, recentLog: Milest
 
   if (next) {
     refs.nextMilestoneName.textContent = next.name;
-    refs.nextMilestoneMeta.innerHTML = `${formatDistanceStr(next.planck)} — <span class="boost">×2 boost</span>`;
+    refs.nextMilestoneMeta.innerHTML = `${formatDistanceStr(next.planck, true)} — <span class="boost">×2 boost</span>`;
     const lo = prev ? prev.planck : ZERO;
     const span = next.planck.sub(lo);
     const progressed = state.currencies.distanceRun.sub(lo);
@@ -45,23 +45,23 @@ export function updateProgress(state: GameState, refs: UiRefs, recentLog: Milest
         <span class="progress__recent-check">✓</span>
         <span class="progress__recent-name">${m.name}</span>
         <span class="progress__recent-fill"></span>
-        <span class="progress__recent-dist mono">${formatDistanceStr(m.planck)}</span>
+        <span class="progress__recent-dist mono">${formatDistanceStr(m.planck, true)}</span>
       </div>`,
     )
     .join('');
 
-  refs.statLifetime.textContent = formatDistanceStr(state.currencies.distanceLifetime);
+  refs.statLifetime.innerHTML = formatDistanceStr(state.currencies.distanceLifetime, true);
   refs.statRuntime.textContent = formatDuration(state.runTimeSec);
-  refs.statClicks.textContent = formatNumber(D(state.totalClicks));
+  refs.statClicks.innerHTML = formatNumber(D(state.totalClicks), true);
   refs.statPrestigeCount.textContent = String(state.prestigeCount);
-  refs.statCrystals.textContent = formatNumber(state.currencies.crystals);
-  refs.statPrestigeMult.textContent = `×${formatNumber(crystalSpeedMultiplier(state))}`;
+  refs.statCrystals.innerHTML = formatNumber(state.currencies.crystals, true);
+  refs.statPrestigeMult.innerHTML = `×${formatNumber(crystalSpeedMultiplier(state), true)}`;
 
   const ready = canPrestige(state);
   refs.prestigePanel.classList.toggle('progress__prestige--ready', ready);
   if (ready) {
     refs.prestigeIcon.textContent = '✦';
-    refs.prestigeText.innerHTML = `Prestige — <span class="mono">+${formatNumber(crystalsOnPrestige(state))}</span> crystals`;
+    refs.prestigeText.innerHTML = `Prestige — <span class="mono">+${formatNumber(crystalsOnPrestige(state), true)}</span> crystals`;
   } else {
     refs.prestigeIcon.textContent = '🔒';
     refs.prestigeText.innerHTML = 'Prestige — reach <em>c</em>';

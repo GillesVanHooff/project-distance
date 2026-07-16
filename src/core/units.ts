@@ -47,9 +47,12 @@ function to3Sig(n: number): string {
   return n.toFixed(2);
 }
 
-/** Format with K/M/B/T suffixes, 3 sig figs; falls back to scientific beyond T. */
-export function formatNumber(value: Decimal): string {
-  if (value.lt(0)) return '-' + formatNumber(value.neg());
+/** Format with K/M/B/T suffixes, 3 sig figs; falls back to scientific beyond T.
+ * `html`: emit the exponent as a real `<sup>` element (for DOM display via
+ * innerHTML) instead of a Unicode superscript character (for canvas fillText,
+ * which can't render markup — see formatMagnitude). */
+export function formatNumber(value: Decimal, html = false): string {
+  if (value.lt(0)) return '-' + formatNumber(value.neg(), html);
   if (value.lt(1000)) {
     const n = value.toNumber();
     // Whole-ish small numbers read chunky (energy is deliberately integral).
@@ -61,13 +64,13 @@ export function formatNumber(value: Decimal): string {
     const scaled = value.div(D(10).pow(tier * 3)).toNumber();
     return to3Sig(scaled) + SUFFIXES[tier];
   }
-  return formatScientific(value);
+  return formatScientific(value, html);
 }
 
-export function formatScientific(value: Decimal): string {
+export function formatScientific(value: Decimal, html = false): string {
   const exp = Math.floor(value.log10());
   const mantissa = value.div(D(10).pow(exp)).toNumber();
-  return `${mantissa.toFixed(2)}×10${toSuperscript(exp)}`;
+  return `${mantissa.toFixed(2)}×10${html ? `<sup>${exp}</sup>` : toSuperscript(exp)}`;
 }
 
 const SUPERSCRIPTS: Record<string, string> = {
@@ -114,20 +117,21 @@ export interface FormattedDistance {
   raw: number;
 }
 
-/** Format a distance in Planck lengths using the unit ladder. */
-export function formatDistance(planck: Decimal): FormattedDistance {
+/** Format a distance in Planck lengths using the unit ladder. See formatNumber
+ * for the `html` flag (real `<sup>` vs. Unicode superscript for canvas). */
+export function formatDistance(planck: Decimal, html = false): FormattedDistance {
   const meters = planck.mul(PLANCK_METERS);
   const row = findUnitRow(meters);
   if (!row) {
     // Planck-length range: 1 → 6.25×10²⁵ ℓₚ, scientific notation past 1000.
     const value = planck.lt(1000)
       ? Math.floor(planck.toNumber()).toString()
-      : formatScientific(planck);
+      : formatScientific(planck, html);
     return { value, symbol: 'ℓₚ', raw: planck.toNumber() };
   }
   const inUnit = meters.div(row.divisor);
   const raw = inUnit.toNumber();
-  const value = row.suffixed ? formatNumber(inUnit) : to3Sig(raw);
+  const value = row.suffixed ? formatNumber(inUnit, html) : to3Sig(raw);
   return { value, symbol: row.symbol, raw };
 }
 
@@ -148,13 +152,13 @@ export function formatMagnitude(n: number): string {
   return `${mantissa.toFixed(2)}×10${toSuperscript(exp)}`;
 }
 
-export function formatDistanceStr(planck: Decimal): string {
-  const { value, symbol } = formatDistance(planck);
+export function formatDistanceStr(planck: Decimal, html = false): string {
+  const { value, symbol } = formatDistance(planck, html);
   return `${value} ${symbol}`;
 }
 
 /** Format a speed in ℓₚ/s using the distance ladder. */
-export function formatSpeed(planckPerSec: Decimal): string {
+export function formatSpeed(planckPerSec: Decimal, html = false): string {
   const meters = planckPerSec.mul(PLANCK_METERS);
   // Once travel is fast enough to read in km/s, stay pinned there all the way
   // to c (~300,000 km/s) instead of collapsing into an abstract "162K km/s" —
@@ -165,16 +169,19 @@ export function formatSpeed(planckPerSec: Decimal): string {
   if (meters.gte(METERS_PER_KM) && meters.lte(C_METERS_PER_SEC)) {
     return `${to3Sig(meters.div(METERS_PER_KM).toNumber())} km/s`;
   }
-  return `${formatDistanceStr(planckPerSec)}/s`;
+  return `${formatDistanceStr(planckPerSec, html)}/s`;
 }
 
 /** Percentage of light speed, 4 significant-ish digits for the long crawl (e.g. "0.0007"). */
-export function formatPercentOfC(speed: Decimal): string {
+export function formatPercentOfC(speed: Decimal, html = false): string {
   const pct = speed.div(C_PLANCK_PER_SEC).mul(100).toNumber();
   if (pct >= 100) return '100';
   if (pct >= 1) return pct.toFixed(1);
   if (pct >= 0.01) return pct.toFixed(2);
-  return pct.toPrecision(1).replace(/e.*$/, (m) => `×10${toSuperscript(Number(m.slice(1)))}`);
+  return pct.toPrecision(1).replace(/e.*$/, (m) => {
+    const exp = Number(m.slice(1));
+    return `×10${html ? `<sup>${exp}</sup>` : toSuperscript(exp)}`;
+  });
 }
 
 export function formatDuration(totalSec: number): string {

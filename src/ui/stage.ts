@@ -42,23 +42,23 @@ export interface StageFrame {
 }
 
 export function updateStage(state: GameState, refs: UiRefs): StageFrame {
-  const { value, symbol, raw } = formatDistance(state.currencies.distanceRun);
-  refs.distanceValue.textContent = value;
+  const { value, symbol, raw } = formatDistance(state.currencies.distanceRun, true);
+  refs.distanceValue.innerHTML = value;
   refs.distanceUnit.textContent = symbol === 'ℓₚ' ? 'Planck Lengths (ℓₚ)' : symbol;
 
   const last = lastMilestone(state.currencies.distanceRun);
   refs.distanceComparison.textContent = last ? `farther than ${last.name}` : '';
 
-  refs.energyValue.textContent = formatNumber(state.currencies.energy);
-  refs.energyIncome.textContent = `+${formatNumber(distanceRate(state))}/s`;
+  refs.energyValue.innerHTML = formatNumber(state.currencies.energy, true);
+  refs.energyIncome.innerHTML = `+${formatNumber(distanceRate(state), true)}/s`;
 
   const spd = speed(state);
-  refs.speedValue.textContent = formatSpeed(spd);
+  refs.speedValue.innerHTML = formatSpeed(spd, true);
 
   const percentUnlocked = state.currencies.distanceRun.gte(PERCENT_C_UNLOCK);
   refs.percentCWrap.classList.toggle('is-hidden', !percentUnlocked);
   if (percentUnlocked) {
-    refs.percentCValue.textContent = formatPercentOfC(spd);
+    refs.percentCValue.innerHTML = formatPercentOfC(spd, true);
   }
 
   const rawSpeedNum = spd.toNumber();

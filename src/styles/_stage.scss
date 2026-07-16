@@ -65,8 +65,9 @@
 
 .stage__energy-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   padding: 14px 22px 18px 22px;
   margin-top: 8px;
   border-top: 1px solid $border-header-thin;
@@ -80,12 +81,12 @@
 
 .stage__energy-icon {
   color: $accent-blue-light;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .stage__energy-value {
   font-family: $font-mono;
-  font-size: 17px;
+  font-size: 24px;
   font-weight: 600;
   color: $text-primary;
 }

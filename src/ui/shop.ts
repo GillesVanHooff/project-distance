@@ -34,7 +34,7 @@ export function renderShop(state: GameState, refs: UiRefs, tab: ShopTab): void {
 }
 
 function lockedRow(unlock: Decimal): string {
-  return `<div class="shop-item shop-item--locked">🔒 Unlocks at <span class="mono">${formatDistanceStr(unlock)}</span></div>`;
+  return `<div class="shop-item shop-item--locked">🔒 Unlocks at <span class="mono">${formatDistanceStr(unlock, true)}</span></div>`;
 }
 
 function renderGenerators(state: GameState): string {
@@ -51,8 +51,8 @@ function renderGenerators(state: GameState): string {
     const cardClass = affordable ? 'shop-item shop-item--affordable' : 'shop-item';
     const detail =
       owned > 0
-        ? `${formatSpeed(perUnit)} each · total ${formatSpeed(total)}`
-        : `${formatSpeed(perUnit)} each`;
+        ? `${formatSpeed(perUnit, true)} each · total ${formatSpeed(total, true)}`
+        : `${formatSpeed(perUnit, true)} each`;
 
     return `
       <div class="${cardClass}" data-generator-index="${i}">
@@ -67,7 +67,7 @@ function renderGenerators(state: GameState): string {
           data-action="buy-generator"
           data-index="${i}"
           ${affordable ? '' : 'disabled'}
-        >Buy — <span class="mono">${formatNumber(cost)}</span> energy</button>
+        >Buy — <span class="mono">${formatNumber(cost, true)}</span> energy</button>
       </div>`;
   });
   return rows.join('') + '<div class="shop__footer-label">← spend</div>';
@@ -107,7 +107,7 @@ function renderUpgradeList(state: GameState, filter: (u: (typeof UPGRADES)[numbe
           data-action="buy-upgrade"
           data-id="${def.id}"
           ${affordable ? '' : 'disabled'}
-        >Buy — <span class="mono">${formatNumber(cost)}</span> energy</button>
+        >Buy — <span class="mono">${formatNumber(cost, true)}</span> energy</button>
       </div>`;
   });
   return rows.join('') + '<div class="shop__footer-label">← spend</div>';
