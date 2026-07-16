@@ -62,8 +62,10 @@ interface Spark {
 }
 
 /** Faint drifting background dust — purely ambient, unrelated to game state.
- * Same depth-scroll treatment as Streak so it reads as part of the same
- * parallax field instead of a separate layer. */
+ * Owns an absolute pixel x (unlike Streak, which recomputes position from a
+ * shared scroll counter each frame) so it can respawn with fresh random
+ * values once it exits the screen — see spawnDust() — instead of endlessly
+ * replaying the same 70 fixed lanes. */
 interface Dust {
   x: number;
   yFrac: number;
@@ -71,6 +73,24 @@ interface Dust {
   size: number;
   phase: number;
   twinkleSpeed: number;
+  // Per-particle color jitter (multiplies the era palette's base RGB
+  // channels) — gives each mote a slightly different hue/tint instead of
+  // every one being an identical dot of the same color.
+  rMul: number;
+  gMul: number;
+  bMul: number;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
+function clamp255(v: number): number {
+  return Math.max(0, Math.min(255, Math.round(v)));
 }
 
 interface Streak {
@@ -179,6 +199,11 @@ export class ParticleScene {
   private sparks: Spark[] = [];
   private readonly dust: Dust[];
   private scrollPx = 0;
+  // Separate from scrollPx: streaks keep a small idle drift (the "20" floor
+  // below) purely for ambient motion, but the grid and dust are meant to read
+  // as things streaming past *because the particle is moving* — so they track
+  // visualSpeed with no floor and sit dead still at rest.
+  private speedScrollPx = 0;
   private visualSpeed = 0;
   // Eased copy of the click-intensity reading (clicks/sec relative to the
   // cap) — see drawParticle()'s trail boost. Kept separate from visualSpeed
@@ -210,6 +235,22 @@ export class ParticleScene {
   // ripple's growth curve so the two visually agree.
   private pulse = 0;
 
+  // visualSpeed level (see visualSpeedFraction in ui/stage.ts) past which the
+  // dust field starts turning into light-speed streaks — chosen so the effect
+  // is a payoff for the final stretch toward c, not something that gradually
+  // creeps in across the whole run.
+  private static readonly HYPERSPACE_START = 0.9;
+
+  /** 0..1, zero until visualSpeed nears its ceiling (~c) and eased in over the
+   * last stretch — see HYPERSPACE_START. Drives both how fast the dust scrolls
+   * and how stretched into streaks it renders (drawDust). */
+  private hyperspaceT(): number {
+    const t =
+      (this.visualSpeed - ParticleScene.HYPERSPACE_START) / (1 - ParticleScene.HYPERSPACE_START);
+    const clamped = Math.max(0, Math.min(1, t));
+    return clamped * clamped; // ease-in: barely noticeable until the last moment
+  }
+
   // Ruler state — see drawRuler(). Position comes straight from the real
   // distance/unit each frame; only the tick *step size* needs smoothing, so it
   // doesn't relabel every frame as speed jitters.
@@ -240,20 +281,36 @@ export class ParticleScene {
       phase: Math.random() * 2000,
     }));
 
+    // Sized before dust is created so spawnDust's initial spread has a real
+    // width to scatter across, instead of being crammed at x=0 until the
+    // first resize event fires.
+    const ro = new ResizeObserver(() => this.resize());
+    ro.observe(canvas.parentElement ?? canvas);
+    this.resize();
+
     // Ambient dust field — faint twinkling motes, independent of clicks or
     // speed, just to keep the background from ever reading as static.
-    this.dust = Array.from({ length: 70 }, () => ({
-      x: Math.random(),
+    // Spread across the full width on load; once running, each mote respawns
+    // (spawnDust) only once it scrolls off the left edge.
+    this.dust = Array.from({ length: 70 }, () => this.spawnDust(Math.random() * this.width));
+  }
+
+  /** Builds one dust mote at the given x, with everything else freshly
+   * randomized — used both for the initial field and to respawn a mote once
+   * it scrolls off-screen (see update()), so the visible set of lanes/hues
+   * keeps changing instead of the same 70 spots looping forever. */
+  private spawnDust(x: number): Dust {
+    return {
+      x,
       yFrac: Math.random(),
       depth: 0.1 + Math.random() * 0.5,
       size: 1.2 + Math.random() * 2.6,
       phase: Math.random() * Math.PI * 2,
       twinkleSpeed: 0.4 + Math.random() * 0.8,
-    }));
-
-    const ro = new ResizeObserver(() => this.resize());
-    ro.observe(canvas.parentElement ?? canvas);
-    this.resize();
+      rMul: 0.8 + Math.random() * 0.4,
+      gMul: 0.8 + Math.random() * 0.4,
+      bMul: 0.8 + Math.random() * 0.4,
+    };
   }
 
   private resize(): void {
@@ -350,6 +407,20 @@ export class ParticleScene {
     if (Math.abs(speedFraction - this.visualSpeed) < 0.001) this.visualSpeed = speedFraction;
     this.clickIntensity += (clickIntensity - this.clickIntensity) * Math.min(1, dt * 3);
     this.scrollPx += dt * (20 + this.visualSpeed * 320);
+    // Extra multiplier near c (on top of visualSpeed's own log-compressed climb)
+    // so the last stretch to light speed reads as a distinct acceleration, not
+    // just more of the same drift rate.
+    const dustSpeed = this.visualSpeed * 320 * (1 + this.hyperspaceT() * 5);
+    this.speedScrollPx += dt * dustSpeed;
+    // Dust moves via its own stored x (not the shared speedScrollPx counter)
+    // so each mote can respawn with fresh random values once it exits left —
+    // see spawnDust(). Without this they'd cycle through the same 70 fixed
+    // lanes forever, which reads as an obviously repeating pattern.
+    for (let i = 0; i < this.dust.length; i++) {
+      const d = this.dust[i]!;
+      d.x -= dustSpeed * d.depth * dt;
+      if (d.x < -20) this.dust[i] = this.spawnDust(this.width + 20);
+    }
 
     this.rulerDistance = ruler.distanceInUnit;
     // The odometer's display unit is a discrete ladder (nm/µm/mm/...), not a
@@ -454,22 +525,45 @@ export class ParticleScene {
 
   private drawDust(p: EraPalette): void {
     const { ctx } = this;
-    // particleMid (not the dimmer p.streak) so the motes actually read against
-    // the background instead of blending into the grid/streak layer.
-    ctx.fillStyle = p.particleMid;
     const rulerBandTop =
       this.height - ParticleScene.RULER_BOTTOM_OFFSET - ParticleScene.RULER_LABEL_CLEARANCE;
+    const hyper = this.hyperspaceT();
+    // particleMid (not the dimmer p.streak) so the motes actually read against
+    // the background instead of blending into the grid/streak layer — each
+    // dust's rMul/gMul/bMul then tints this base slightly differently below.
+    const base = hexToRgb(p.particleMid);
     for (const d of this.dust) {
       const y = d.yFrac * this.height;
-      if (y >= rulerBandTop) continue; // never draw dust at/under the ruler
-      const cycle = this.width + 40;
-      const x = (d.x * cycle - this.scrollPx * d.depth) % cycle;
-      const drawX = x < 0 ? x + cycle : x;
+      // Margin by the mote's own size, not just its center point — otherwise
+      // a dot whose center clears the band but whose radius doesn't still
+      // visually skims the ruler's top edge.
+      if (y + d.size >= rulerBandTop) continue; // never draw dust at/under the ruler
+      const drawX = d.x;
       const twinkle = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(this.time * d.twinkleSpeed + d.phase));
-      ctx.globalAlpha = twinkle * 0.85;
-      ctx.beginPath();
-      ctx.arc(drawX - 20, y, d.size, 0, Math.PI * 2);
-      ctx.fill();
+      const color = `rgb(${clamp255(base.r * d.rMul)}, ${clamp255(base.g * d.gMul)}, ${clamp255(base.b * d.bMul)})`;
+
+      if (hyper > 0.02) {
+        // Light-speed streak: a fading trail behind the mote, longer for
+        // closer (higher-depth) dust so it reads as flying past faster —
+        // same parallax logic as the particle's own trail (drawParticle).
+        const streakLen = hyper * (30 + d.depth * 220);
+        const grad = ctx.createLinearGradient(drawX + streakLen, y, drawX, y);
+        grad.addColorStop(0, 'transparent');
+        grad.addColorStop(1, color);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = Math.max(0.7, d.size * 0.9);
+        ctx.globalAlpha = Math.min(1, twinkle * 0.85 + hyper * 0.3);
+        ctx.beginPath();
+        ctx.moveTo(drawX + streakLen, y);
+        ctx.lineTo(drawX, y);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = color;
+        ctx.globalAlpha = twinkle * 0.85;
+        ctx.beginPath();
+        ctx.arc(drawX, y, d.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -493,7 +587,7 @@ export class ParticleScene {
   private drawGrid(p: EraPalette): void {
     const { ctx } = this;
     const spacing = 96;
-    const offset = (this.scrollPx * 0.15) % spacing;
+    const offset = (this.speedScrollPx * 0.15) % spacing;
     ctx.strokeStyle = p.gridLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
