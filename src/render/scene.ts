@@ -48,6 +48,31 @@ interface Ripple {
   startRadius: number;
 }
 
+/** A single spark flung out by a click — the "burst" half of the click
+ * feedback, separate from the ripple (which stays centered) and the floating
+ * text (which stays put and rises). Sparks scatter and fall off outward. */
+interface Spark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  life: number;
+  size: number;
+}
+
+/** Faint drifting background dust — purely ambient, unrelated to game state.
+ * Same depth-scroll treatment as Streak so it reads as part of the same
+ * parallax field instead of a separate layer. */
+interface Dust {
+  x: number;
+  yFrac: number;
+  depth: number;
+  size: number;
+  phase: number;
+  twinkleSpeed: number;
+}
+
 interface Streak {
   yFrac: number;
   depth: number; // 0..1 — parallax speed multiplier relative to scroll
@@ -151,6 +176,8 @@ export class ParticleScene {
   private readonly streaks: Streak[];
   private floating: FloatingText[] = [];
   private ripples: Ripple[] = [];
+  private sparks: Spark[] = [];
+  private readonly dust: Dust[];
   private scrollPx = 0;
   private visualSpeed = 0;
   // Eased copy of the click-intensity reading (clicks/sec relative to the
@@ -192,6 +219,11 @@ export class ParticleScene {
   private tickStep: NiceStep = { exp: 0, value: 1 };
   private tickStepAge = 999; // large: no fade-in flash on first paint
   private static readonly RULER_TARGET_PX = 140;
+  /** Distance from the canvas bottom to the ruler's baseline (see drawRuler). */
+  private static readonly RULER_BOTTOM_OFFSET = 44;
+  /** Extra clearance above the ruler baseline reserved for its tick labels —
+   * dust (drawDust) stays clear of this whole band, not just the line itself. */
+  private static readonly RULER_LABEL_CLEARANCE = 24;
   private static readonly RULER_TEMPO_SECONDS = 1.8;
   private static readonly RULER_MINOR_PER_MAJOR = 5;
 
@@ -206,6 +238,17 @@ export class ParticleScene {
       length: 140 + Math.random() * 220,
       opacity: 0.5 + Math.random() * 0.5,
       phase: Math.random() * 2000,
+    }));
+
+    // Ambient dust field — faint twinkling motes, independent of clicks or
+    // speed, just to keep the background from ever reading as static.
+    this.dust = Array.from({ length: 70 }, () => ({
+      x: Math.random(),
+      yFrac: Math.random(),
+      depth: 0.1 + Math.random() * 0.5,
+      size: 1.2 + Math.random() * 2.6,
+      phase: Math.random() * Math.PI * 2,
+      twinkleSpeed: 0.4 + Math.random() * 0.8,
     }));
 
     const ro = new ResizeObserver(() => this.resize());
@@ -240,6 +283,31 @@ export class ParticleScene {
     this.floating.push({ x, y, text: label, age: 0 });
     this.pulse = 1;
     this.ripples.push({ age: 0, startRadius: this.particleRadius() });
+
+    // Burst always originates at the particle, not the click point, so it
+    // reads as the particle reacting rather than the cursor spawning debris —
+    // consistent with the ripple above. Count scales gently with clickIntensity
+    // (rapid clicking = a denser burst) but is capped well below what an
+    // autoclicker at CLICK_RATE_CAP would render as clutter every frame.
+    const count = 6 + Math.round(Math.min(1, this.clickIntensity) * 8);
+    const centerX = this.particleVisualX;
+    const centerY = this.particleY;
+    const edge = this.particleRadius();
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 90 + Math.random() * 280;
+      // Spawn on the particle's rim along the same angle it flies off in,
+      // not the center — reads as debris leaving the surface, not the core.
+      this.sparks.push({
+        x: centerX + Math.cos(angle) * edge,
+        y: centerY + Math.sin(angle) * edge,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        age: 0,
+        life: 0.45 + Math.random() * 0.5,
+        size: 1 + Math.random() * 2.2,
+      });
+    }
   }
 
   /** Horizontal anchor the particle sits at — also where the ruler's "you are here"
@@ -348,6 +416,18 @@ export class ParticleScene {
     this.floating = this.floating.filter((f) => f.age < 1.4);
     for (const r of this.ripples) r.age += dt;
     this.ripples = this.ripples.filter((r) => r.age < 0.6);
+
+    for (const s of this.sparks) {
+      s.age += dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      // Drag rather than gravity — these are sparks in a vacuum-ish scene, not
+      // debris falling under gravity, so they should decelerate and hang, not arc down.
+      // Light drag (was dt*3) so the burst actually travels before it stalls.
+      s.vx *= 1 - Math.min(1, dt * 1.4);
+      s.vy *= 1 - Math.min(1, dt * 1.4);
+    }
+    this.sparks = this.sparks.filter((s) => s.age < s.life);
   }
 
   draw(): void {
@@ -363,11 +443,51 @@ export class ParticleScene {
     ctx.fillRect(0, 0, w, h);
 
     this.drawGrid(p);
+    this.drawDust(p);
     this.drawStreaks(p);
     this.drawRuler(PARTICLE_PALETTE);
     this.drawParticle(PARTICLE_PALETTE);
+    this.drawSparks(PARTICLE_PALETTE);
     this.drawRipples(PARTICLE_PALETTE);
     this.drawFloatingText(PARTICLE_PALETTE);
+  }
+
+  private drawDust(p: EraPalette): void {
+    const { ctx } = this;
+    // particleMid (not the dimmer p.streak) so the motes actually read against
+    // the background instead of blending into the grid/streak layer.
+    ctx.fillStyle = p.particleMid;
+    const rulerBandTop =
+      this.height - ParticleScene.RULER_BOTTOM_OFFSET - ParticleScene.RULER_LABEL_CLEARANCE;
+    for (const d of this.dust) {
+      const y = d.yFrac * this.height;
+      if (y >= rulerBandTop) continue; // never draw dust at/under the ruler
+      const cycle = this.width + 40;
+      const x = (d.x * cycle - this.scrollPx * d.depth) % cycle;
+      const drawX = x < 0 ? x + cycle : x;
+      const twinkle = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(this.time * d.twinkleSpeed + d.phase));
+      ctx.globalAlpha = twinkle * 0.85;
+      ctx.beginPath();
+      ctx.arc(drawX - 20, y, d.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawSparks(p: EraPalette): void {
+    const { ctx } = this;
+    for (const s of this.sparks) {
+      const t = s.age / s.life;
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = t < 0.5 ? p.particleCore : p.particleMid;
+      ctx.shadowColor = p.glow;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * (1 - t * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
   }
 
   private drawGrid(p: EraPalette): void {
@@ -415,7 +535,7 @@ export class ParticleScene {
     const { ctx } = this;
     // +0.5 keeps 1px strokes aligned to a device-pixel center instead of a
     // boundary, which otherwise anti-aliases them into a faint 2px smear.
-    const rulerY = Math.round(this.height - 44) + 0.5;
+    const rulerY = Math.round(this.height - ParticleScene.RULER_BOTTOM_OFFSET) + 0.5;
 
     const step = this.tickStep;
     // Distance never goes negative (CLAUDE.md: "distance never decreases"),
