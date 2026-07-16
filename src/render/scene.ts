@@ -289,7 +289,7 @@ export class ParticleScene {
     // consistent with the ripple above. Count scales gently with clickIntensity
     // (rapid clicking = a denser burst) but is capped well below what an
     // autoclicker at CLICK_RATE_CAP would render as clutter every frame.
-    const count = 6 + Math.round(Math.min(1, this.clickIntensity) * 8);
+    const count = 4 + Math.round(Math.min(1, this.clickIntensity) * 6);
     const centerX = this.particleVisualX;
     const centerY = this.particleY;
     const edge = this.particleRadius();
@@ -305,7 +305,7 @@ export class ParticleScene {
         vy: Math.sin(angle) * speed,
         age: 0,
         life: 0.45 + Math.random() * 0.5,
-        size: 1 + Math.random() * 2.2,
+        size: 0.8 + Math.random() * 1.6,
       });
     }
   }
@@ -478,10 +478,10 @@ export class ParticleScene {
     const { ctx } = this;
     for (const s of this.sparks) {
       const t = s.age / s.life;
-      ctx.globalAlpha = 1 - t;
+      ctx.globalAlpha = (1 - t) * 0.75;
       ctx.fillStyle = t < 0.5 ? p.particleCore : p.particleMid;
       ctx.shadowColor = p.glow;
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = 4;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size * (1 - t * 0.6), 0, Math.PI * 2);
       ctx.fill();
