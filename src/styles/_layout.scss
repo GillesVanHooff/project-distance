@@ -35,6 +35,20 @@
   overflow: hidden;
 }
 
+// While the offline-progress overlay is up (see stage__offline-overlay),
+// everything outside the stage is visually inert until "Okay" is clicked.
+.app.is-offline-locked {
+  .shop,
+  .progress {
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  .stage__admin {
+    pointer-events: none;
+  }
+}
+
 @media (max-width: $breakpoint-stacked) {
   .app {
     height: auto;

@@ -192,3 +192,90 @@
 .stage__click-hint.is-hidden {
   opacity: 0;
 }
+
+.stage__offline-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 10, 0.72);
+  backdrop-filter: blur(2px);
+
+  &.is-hidden {
+    display: none;
+  }
+}
+
+.stage__offline-card {
+  background: $bg-card;
+  border: 1px solid $border-card-affordable;
+  border-radius: $radius-panel;
+  padding: 28px 34px;
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.stage__offline-title {
+  font-family: $font-body;
+  font-size: 20px;
+  font-weight: 600;
+  color: $text-primary;
+  margin-bottom: 8px;
+}
+
+.stage__offline-meta {
+  font-size: 13px;
+  color: $text-muted;
+  margin-bottom: 18px;
+
+  span {
+    color: $text-body;
+    font-weight: 600;
+  }
+}
+
+.stage__offline-gain {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.stage__offline-gain-value {
+  font-family: $font-mono;
+  font-size: 28px;
+  font-weight: 600;
+  color: $accent-blue-light;
+}
+
+.stage__offline-gain-label {
+  font-size: 13px;
+  color: $text-dim;
+}
+
+.stage__offline-energy {
+  font-family: $font-mono;
+  font-size: 14px;
+  color: $green;
+  margin-bottom: 22px;
+}
+
+.stage__offline-btn {
+  font-family: $font-body;
+  font-size: 14px;
+  font-weight: 600;
+  color: $text-primary;
+  background: $accent-blue;
+  border: none;
+  border-radius: $radius-control;
+  padding: 10px 32px;
+  cursor: pointer;
+
+  &:hover {
+    background: $accent-blue-dark;
+  }
+}

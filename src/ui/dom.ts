@@ -1,4 +1,5 @@
 export interface UiRefs {
+  appRoot: HTMLElement;
   shopList: HTMLElement;
   shopTabs: HTMLButtonElement[];
   photonTabIcon: HTMLElement;
@@ -15,6 +16,10 @@ export interface UiRefs {
   percentCValue: HTMLElement;
   speedBarFill: HTMLElement;
   clickHint: HTMLElement;
+  offlineOverlay: HTMLElement;
+  offlineDuration: HTMLElement;
+  offlineDistance: HTMLElement;
+  offlineEnergy: HTMLElement;
   nextMilestoneName: HTMLElement;
   nextMilestoneMeta: HTMLElement;
   milestoneBarFill: HTMLElement;
@@ -39,6 +44,7 @@ function req<T extends HTMLElement>(id: string): T {
 
 export function queryRefs(): UiRefs {
   return {
+    appRoot: req('app'),
     shopList: req('shop-list'),
     shopTabs: Array.from(document.querySelectorAll<HTMLButtonElement>('.shop__tab[data-tab]')),
     photonTabIcon: req('photon-tab-icon'),
@@ -55,6 +61,10 @@ export function queryRefs(): UiRefs {
     percentCValue: req('percent-c-value'),
     speedBarFill: req('speed-bar-fill'),
     clickHint: req('click-hint'),
+    offlineOverlay: req('offline-overlay'),
+    offlineDuration: req('offline-duration'),
+    offlineDistance: req('offline-distance'),
+    offlineEnergy: req('offline-energy'),
     nextMilestoneName: req('next-milestone-name'),
     nextMilestoneMeta: req('next-milestone-meta'),
     milestoneBarFill: req('milestone-bar-fill'),

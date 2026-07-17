@@ -1,7 +1,8 @@
-import { D, Decimal } from './decimal';
+import { D, Decimal, ZERO } from './decimal';
 import { GENERATORS } from './content';
 import { nextMilestone } from './milestones';
-import { canPrestige, gainDistance, prestige } from './logic';
+import { canPrestige, gainDistance, generatorSpeed, globalMultiplier, prestige } from './logic';
+import { C_PLANCK_PER_SEC, GENERATOR_DOUBLE_EVERY } from './constants';
 import type { GameState } from './state';
 
 /**
@@ -44,13 +45,74 @@ export function debugAddCrystals(state: GameState, amount: Decimal = D(5)): void
 }
 
 /**
- * Roughly double the last generator's owned count (minimum +10), for testing
- * the speed bar / %-of-c display without grinding. Repeatable: each press
- * ramps speed up further, converging on c over a handful of clicks rather
- * than jumping straight there (that's what Force Prestige is for).
+ * Fixed ladder of target speeds, in raw ℓₚ/s, the debug button steps through
+ * one rung per press: every order of magnitude from 10² up to c (~1.86e43,
+ * i.e. 10^43.27) — about 42 rungs. Static rather than computed off the current
+ * speed (e.g. "double it") so the ramp is identical every game regardless of
+ * what's already owned, and can't compound into a runaway jump.
+ *
+ * Deliberately spaced evenly in raw ℓₚ/s log-space rather than in real-world
+ * units (m/s, km/s, ...): the speed bar (visualSpeedFraction in ui/stage.ts)
+ * is itself log-mapped across the full 1 ℓₚ/s-to-c range, and a Planck length
+ * is so small that any humanly-readable speed (even 1 m/s ≈ 6e34 ℓₚ/s) already
+ * sits at ~81% up that bar. A ladder built from real-world speeds therefore
+ * filled the bar to ~81% on the very first press — reading as "instantly at
+ * lightspeed" — before creeping through the last stretch on later presses.
+ *
+ * One rung per OoM (not two) so more presses land inside the last 10% of the
+ * bar: ParticleScene's HYPERSPACE_START (render/scene.ts) eases in the
+ * light-speed streak effect once the bar crosses 90%, so a coarser ladder
+ * blew through that whole payoff stretch in a rung or two — visually reading
+ * as "instantly at lightspeed" well before the bar (or canPrestige) actually
+ * hit 100%.
+ */
+const DEBUG_SPEED_STEPS: readonly Decimal[] = Array.from({ length: 42 }, (_, i) =>
+  D(10).pow(2 + i),
+);
+
+/**
+ * Advance to the next rung of DEBUG_SPEED_STEPS, for testing the speed bar /
+ * %-of-c display without grinding.
+ *
+ * Works by solving for the last generator's owned count that hits the target
+ * speed, rather than just scaling its owned count directly: that generator's
+ * production doubles every GENERATOR_DOUBLE_EVERY owned (logic.ts), which is
+ * exponential in count, so naively doubling count made the doublings stack up
+ * and the very next press blow straight through to c instead of landing
+ * partway there.
  */
 export function debugAddSpeed(state: GameState): void {
+  const cap = C_PLANCK_PER_SEC;
+  const current = generatorSpeed(state);
+  if (current.gte(cap)) return;
+
+  const next = DEBUG_SPEED_STEPS.find((s) => s.gt(current)) ?? cap;
+  const target = Decimal.min(next, cap.mul(1 - 1e-9));
+
   const lastIndex = GENERATORS.length - 1;
-  const current = state.generators[lastIndex] ?? 0;
-  state.generators[lastIndex] = current + Math.max(10, current);
+  const mult = globalMultiplier(state);
+  let othersProd = ZERO;
+  for (let i = 0; i < lastIndex; i++) {
+    const count = state.generators[i] ?? 0;
+    if (count === 0) continue;
+    const doublings = Math.floor(count / GENERATOR_DOUBLE_EVERY);
+    othersProd = othersProd.add(GENERATORS[i]!.baseProd.mul(count).mul(D(2).pow(doublings)));
+  }
+  const neededLastProd = target.div(mult).sub(othersProd);
+
+  const lastGenProd = (count: number): Decimal => {
+    if (count <= 0) return ZERO;
+    const doublings = Math.floor(count / GENERATOR_DOUBLE_EVERY);
+    return GENERATORS[lastIndex]!.baseProd.mul(count).mul(D(2).pow(doublings));
+  };
+
+  let lo = state.generators[lastIndex] ?? 0;
+  let hi = Math.max(lo * 2, 10);
+  while (lastGenProd(hi).lt(neededLastProd)) hi *= 2;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    if (lastGenProd(mid).lt(neededLastProd)) lo = mid;
+    else hi = mid;
+  }
+  state.generators[lastIndex] = Math.ceil(hi);
 }

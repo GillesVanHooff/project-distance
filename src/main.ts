@@ -1,6 +1,7 @@
 import './styles/main.scss';
 
 import { TICK_RATE } from './core/constants';
+import { D, type Decimal } from './core/decimal';
 import { buyGenerator, buyUpgrade, canPrestige, click, prestige, tick } from './core/logic';
 import {
   debugAddCrystals,
@@ -14,6 +15,7 @@ import { applyOfflineProgress, deserialize, serialize } from './core/save';
 import { newGame, type GameState } from './core/state';
 import { formatDistanceStr } from './core/units';
 import { queryRefs } from './ui/dom';
+import { hideOfflineOverlay, showOfflineOverlay } from './ui/offline';
 import { initialRecentLog, updateProgress } from './ui/progress';
 import { renderShop, setActiveTab, type ShopTab } from './ui/shop';
 import { hideClickHint, updateStage } from './ui/stage';
@@ -23,16 +25,23 @@ const SAVE_KEY = 'project-distance-save';
 const AUTOSAVE_INTERVAL_MS = 10_000;
 const UI_REFRESH_INTERVAL_MS = 250;
 
-function loadOrCreateState(): GameState {
+interface LoadedGame {
+  state: GameState;
+  offlineGain: Decimal;
+  offlineElapsedSec: number;
+}
+
+function loadOrCreateState(): LoadedGame {
   const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return newGame();
+  if (!raw) return { state: newGame(), offlineGain: D(0), offlineElapsedSec: 0 };
   try {
     const { state, savedAt } = deserialize(raw);
-    applyOfflineProgress(state, (Date.now() - savedAt) / 1000);
-    return state;
+    const offlineElapsedSec = (Date.now() - savedAt) / 1000;
+    const offlineGain = applyOfflineProgress(state, offlineElapsedSec);
+    return { state, offlineGain, offlineElapsedSec };
   } catch (err) {
     console.warn('Failed to load save, starting a new game:', err);
-    return newGame();
+    return { state: newGame(), offlineGain: D(0), offlineElapsedSec: 0 };
   }
 }
 
@@ -42,8 +51,26 @@ function saveState(state: GameState): void {
 
 function main(): void {
   const refs = queryRefs();
-  const state = loadOrCreateState();
+  const { state, offlineGain, offlineElapsedSec } = loadOrCreateState();
   const scene = new ParticleScene(refs.sceneCanvas);
+
+  // Blocks shop/prestige/scene interaction until the offline-progress
+  // overlay (if shown) is dismissed via its "Okay" button.
+  let inputLocked = offlineGain.gt(0);
+  if (inputLocked) {
+    showOfflineOverlay(refs, offlineGain, offlineElapsedSec);
+    refs.appRoot.classList.add('is-offline-locked');
+  }
+  // Overlay sits inside the scene (the click target); swallow clicks here so
+  // dismissing it doesn't also register as a click-to-accelerate.
+  refs.offlineOverlay.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if ((e.target as HTMLElement).closest('[data-action="offline-ok"]')) {
+      inputLocked = false;
+      refs.appRoot.classList.remove('is-offline-locked');
+      hideOfflineOverlay(refs);
+    }
+  });
 
   let activeTab: ShopTab = 'generators';
   let recentLog = initialRecentLog(state);
@@ -62,6 +89,7 @@ function main(): void {
 
   for (const btn of refs.shopTabs) {
     btn.addEventListener('click', () => {
+      if (inputLocked) return;
       const tab = btn.dataset['tab'] as ShopTab | undefined;
       if (!tab || btn.disabled) return;
       activeTab = tab;
@@ -74,7 +102,7 @@ function main(): void {
   // UI_REFRESH_INTERVAL_MS, so a held-down press can outlive the button node a
   // 'click' would need at release time, silently swallowing the purchase.
   refs.shopList.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || inputLocked) return;
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
     if (!btn || btn.disabled) return;
     if (btn.dataset['action'] === 'buy-generator') {
@@ -87,6 +115,7 @@ function main(): void {
   });
 
   refs.scene.addEventListener('click', (e) => {
+    if (inputLocked) return;
     const gained = click(state);
     scene.addClickEffect(e.clientX, e.clientY, `+${formatDistanceStr(gained)}`);
     hideClickHint(refs);
@@ -101,7 +130,7 @@ function main(): void {
   }
 
   refs.prestigePanel.addEventListener('click', () => {
-    if (!canPrestige(state)) return;
+    if (inputLocked || !canPrestige(state)) return;
     prestige(state);
     onPrestiged();
   });
@@ -111,6 +140,7 @@ function main(): void {
   if (import.meta.env.DEV) {
     refs.adminBar.classList.add('is-visible');
     refs.adminBar.addEventListener('click', (e) => {
+      if (inputLocked) return;
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
       if (!btn) return;
       switch (btn.dataset['action']) {

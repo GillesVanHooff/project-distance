@@ -12,7 +12,7 @@
     />
   </head>
   <body>
-    <div class="app">
+    <div class="app" id="app">
       <div class="app__grid">
         <!-- ============ LEFT: SHOP ============ -->
         <aside class="panel shop" data-screen-label="Shop">
@@ -91,6 +91,21 @@
             <div class="stage__speed-bar"><div class="stage__speed-bar-fill" id="speed-bar-fill"></div></div>
 
             <div class="stage__click-hint" id="click-hint">Click to accelerate</div>
+
+            <div class="stage__offline-overlay is-hidden" id="offline-overlay">
+              <div class="stage__offline-card">
+                <div class="stage__offline-title">Welcome back</div>
+                <div class="stage__offline-meta">
+                  You were away for <span id="offline-duration">0:00</span>
+                </div>
+                <div class="stage__offline-gain">
+                  <span class="stage__offline-gain-value" id="offline-distance">0</span>
+                  <span class="stage__offline-gain-label">distance gained</span>
+                </div>
+                <div class="stage__offline-energy">+<span id="offline-energy">0</span> energy</div>
+                <button class="stage__offline-btn" data-action="offline-ok" type="button">Okay</button>
+              </div>
+            </div>
           </div>
         </main>
 

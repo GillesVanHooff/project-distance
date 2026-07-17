@@ -187,8 +187,11 @@ export function formatPercentOfC(speed: Decimal, html = false): string {
 export function formatDuration(totalSec: number): string {
   const s = Math.floor(totalSec % 60);
   const m = Math.floor((totalSec / 60) % 60);
-  const h = Math.floor(totalSec / 3600);
+  const h = Math.floor((totalSec / 3600) % 24);
+  const d = Math.floor(totalSec / 86_400);
   const mm = String(m).padStart(2, '0');
   const ss = String(s).padStart(2, '0');
+  const hh = String(h).padStart(2, '0');
+  if (d > 0) return `${d}d ${hh}:${mm}:${ss}`;
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
