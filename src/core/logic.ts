@@ -13,6 +13,8 @@ import {
   CRYSTAL_SPEED_BONUS,
   GENERATOR_COST_GROWTH,
   GENERATOR_DOUBLE_EVERY,
+  GOLDEN_BOOST_DURATION_SEC,
+  GOLDEN_BOOST_MULTIPLIER,
   TIME_MACHINE_BASE_COST,
   TIME_MACHINE_COMPRESSION,
   TIME_MACHINE_COST_GROWTH,
@@ -152,6 +154,13 @@ export function activateBurst(state: GameState): boolean {
   return true;
 }
 
+/** Golden particle catch payoff (see render/scene.ts's consumeGoldenCatch) —
+ * refreshes to the full duration rather than stacking additively, so an
+ * unlikely back-to-back catch extends the window instead of compounding it. */
+export function activateGoldenBoost(state: GameState): void {
+  state.goldenBoostActiveSec = GOLDEN_BOOST_DURATION_SEC;
+}
+
 /**
  * Perform one click. Returns the distance gained (for floating text).
  * Diminishing returns past ~CLICK_RATE_CAP clicks/sec via a token bucket,
@@ -165,6 +174,7 @@ export function click(state: GameState): Decimal {
   }
   let value = clickValue(state).mul(factor);
   if (state.burstActiveSec > 0) value = value.mul(BURST_MULTIPLIER);
+  if (state.goldenBoostActiveSec > 0) value = value.mul(GOLDEN_BOOST_MULTIPLIER);
   gainDistance(state, value);
   state.totalClicks += 1;
   state.clickRate += CLICK_RATE_IMPULSE;
@@ -189,6 +199,9 @@ export function tick(state: GameState, dt: number): void {
   if (state.burstActiveSec > 0) state.burstActiveSec = Math.max(0, state.burstActiveSec - dt);
   else if (state.burstCooldownSec > 0) {
     state.burstCooldownSec = Math.max(0, state.burstCooldownSec - dt);
+  }
+  if (state.goldenBoostActiveSec > 0) {
+    state.goldenBoostActiveSec = Math.max(0, state.goldenBoostActiveSec - dt);
   }
   state.clickBucket = Math.min(CLICK_RATE_CAP, state.clickBucket + CLICK_RATE_CAP * dt);
   state.clickRate *= Math.exp(-CLICK_RATE_DECAY * dt);
@@ -314,6 +327,7 @@ export function prestige(state: GameState): Decimal {
   state.runTimeSec = 0;
   state.burstActiveSec = 0;
   state.burstCooldownSec = 0;
+  state.goldenBoostActiveSec = 0;
   return gain;
 }
 

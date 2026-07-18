@@ -177,6 +177,62 @@
   transition: width 0.2s ease-out;
 }
 
+// Golden click-boost banner (see main.ts's activateGoldenBoost wiring):
+// visible only while the boost is active, pinned just below the speed bar —
+// the ongoing "you are currently supercharged" readout, separate from the
+// scene's own gold aura/spark effect on the particle itself.
+.stage__boost {
+  position: absolute;
+  left: 50%;
+  top: 60px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 16px;
+  background: rgba(20, 15, 5, 0.6);
+  border: 1px solid rgba(255, 210, 76, 0.4);
+  border-radius: $radius-control;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  z-index: 5;
+
+  &.is-hidden {
+    opacity: 0;
+  }
+}
+
+.stage__boost-label {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-weight: 600;
+  color: $gold-light;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+
+  span {
+    color: $gold;
+  }
+}
+
+.stage__boost-bar {
+  width: 140px;
+  height: 3px;
+  background: rgba(255, 210, 76, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stage__boost-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, $gold-dark, $gold);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255, 210, 76, 0.6);
+  transition: width 0.1s linear;
+}
+
 .stage__click-hint {
   position: absolute;
   left: 50%;

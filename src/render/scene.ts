@@ -191,7 +191,9 @@ const GOLD_PALETTE = {
 /** The rare bonus particle (CLAUDE.md-adjacent fun feature, not in the design
  * doc): spawns off the right edge every now and then and drifts slowly left,
  * independent of the parallax/scroll fields since it's an anomaly, not part
- * of the background. Catching it is added in a later step. */
+ * of the background. Touching it with the main particle "catches" it (see
+ * checkGoldenCatch/spawnGoldenCatchBurst) — the actual click-boost payoff for
+ * a catch is applied outside this class, in a later step. */
 interface GoldenParticle {
   x: number;
   y: number;
@@ -308,6 +310,21 @@ export class ParticleScene {
   // particle's own idle wobble.
   private static readonly GOLDEN_VY_MAX = 55;
   private static readonly GOLDEN_VY_EASE_RATE = 3;
+  // Extra forgiveness added on top of both particles' own radii for the catch
+  // test (see checkGoldenCatch) — this is a reward mechanic, not a precision
+  // hitbox test, so a near-touch should still count.
+  private static readonly GOLDEN_CATCH_MARGIN = 6;
+  // Set for one frame the instant a catch lands; main.ts polls and clears it
+  // via consumeGoldenCatch() to trigger the click-boost payoff without this
+  // class needing to know anything about game state.
+  private goldenCaught = false;
+
+  // Golden click-boost visual (see update()'s goldenBoostFraction param and
+  // drawBoostAura()): 0..1, remaining/total duration, set fresh each frame
+  // from GameState — this class only reacts to it, the boost itself (timer,
+  // click multiplier) lives entirely in core/logic.ts.
+  private goldenBoostFraction = 0;
+  private goldenBoostEmitTimer = 0;
 
   private static randomGoldenInterval(): number {
     return (
@@ -422,6 +439,15 @@ export class ParticleScene {
     this.pointer = x !== null && y !== null ? { x, y } : null;
   }
 
+  /** True if the main particle caught the golden particle since the last call
+   * — reads it once and clears the flag, so main.ts can poll this every frame
+   * without double-triggering the (later) click-boost payoff for one catch. */
+  consumeGoldenCatch(): boolean {
+    const caught = this.goldenCaught;
+    this.goldenCaught = false;
+    return caught;
+  }
+
   /** Spawn a floating label at a client-space point (e.g. from a MouseEvent), and
    * punch the particle — the ripple emanates from the particle itself, not the
    * click position, so it isn't positioned here. */
@@ -495,9 +521,18 @@ export class ParticleScene {
   /** speedFraction: 0..1 visual intensity (log-mapped by the caller — see ui/stage.ts).
    * clickIntensity: current clicks/sec relative to the cap (see ui/stage.ts) — drives
    * the trail's click-reactive flare independent of speedFraction's log compression.
-   * ruler: real distance/speed in the odometer's current unit, for truthful tick labels. */
-  update(dt: number, speedFraction: number, clickIntensity: number, ruler: RulerInput): void {
+   * ruler: real distance/speed in the odometer's current unit, for truthful tick labels.
+   * goldenBoostFraction: 0..1 remaining/total of the golden-catch click boost
+   * (see ui/stage.ts) — drives the particle's gold aura/spark effect below. */
+  update(
+    dt: number,
+    speedFraction: number,
+    clickIntensity: number,
+    ruler: RulerInput,
+    goldenBoostFraction: number,
+  ): void {
     this.time += dt;
+    this.goldenBoostFraction = goldenBoostFraction;
     this.visualSpeed += (speedFraction - this.visualSpeed) * Math.min(1, dt * 2.5);
     // Exponential easing asymptotically approaches the target but never quite
     // reaches it — left alone, a trail floor further down (drawParticle) would
@@ -523,9 +558,8 @@ export class ParticleScene {
     // Golden particle: drifts left at a constant horizontal speed,
     // independent of scroll/visualSpeed (it's an anomaly passing through, not
     // part of the background), while wandering vertically. One at a time;
-    // despawns and restarts the random timer once it exits, whether or not it
-    // was caught (catching lands in a later step and will clear `golden`
-    // itself before this despawn check runs).
+    // despawns and restarts the random timer once it exits the left edge or
+    // is caught (see checkGoldenCatch below).
     const goldenTopMargin = ParticleScene.GOLDEN_TOP_CLEARANCE;
     const goldenRulerBandTop =
       this.height - ParticleScene.RULER_BOTTOM_OFFSET - ParticleScene.RULER_LABEL_CLEARANCE;
@@ -555,36 +589,49 @@ export class ParticleScene {
         g.vyTarget = -Math.abs(g.vyTarget);
       }
 
-      // Ambient trickle of small gold sparks, purely decorative, reusing the
-      // same Spark array/physics/fade the click burst uses (see
-      // addClickEffect) — just smaller, dimmer, and continuous rather than a
-      // one-shot burst.
-      this.goldenEmitTimer -= dt;
-      if (this.goldenEmitTimer <= 0) {
-        this.goldenEmitTimer = 0.025 + Math.random() * 0.035;
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 14 + Math.random() * 38;
-        this.sparks.push({
-          x: g.x,
-          y: g.y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          age: 0,
-          life: 0.5 + Math.random() * 0.5,
-          size: 1 + Math.random() * 1.6,
-          gold: true,
-        });
-      }
-
-      this.goldenTrailHistory.push({ x: g.x, y: g.y });
-      if (this.goldenTrailHistory.length > ParticleScene.GOLDEN_TRAIL_SAMPLES) {
-        this.goldenTrailHistory.shift();
-      }
-
-      if (g.x < -ParticleScene.GOLDEN_RADIUS * 4) {
+      // Catch test: circle-circle overlap against the main particle's current
+      // (bobbing/jittering, mouse-follow-adjusted) on-screen position — checked
+      // every frame the golden is alive, since either particle can move into
+      // the other. A catch short-circuits the rest of this particle's normal
+      // per-frame handling below (ambient trickle, trail, offscreen despawn).
+      if (this.checkGoldenCatch(g)) {
+        this.spawnGoldenCatchBurst(g.x, g.y);
+        this.goldenCaught = true;
         this.golden = null;
         this.goldenTrailHistory.length = 0;
         this.goldenSpawnTimer = ParticleScene.randomGoldenInterval();
+      } else {
+        // Ambient trickle of small gold sparks, purely decorative, reusing the
+        // same Spark array/physics/fade the click burst uses (see
+        // addClickEffect) — just smaller, dimmer, and continuous rather than a
+        // one-shot burst.
+        this.goldenEmitTimer -= dt;
+        if (this.goldenEmitTimer <= 0) {
+          this.goldenEmitTimer = 0.025 + Math.random() * 0.035;
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 14 + Math.random() * 38;
+          this.sparks.push({
+            x: g.x,
+            y: g.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            age: 0,
+            life: 0.5 + Math.random() * 0.5,
+            size: 1 + Math.random() * 1.6,
+            gold: true,
+          });
+        }
+
+        this.goldenTrailHistory.push({ x: g.x, y: g.y });
+        if (this.goldenTrailHistory.length > ParticleScene.GOLDEN_TRAIL_SAMPLES) {
+          this.goldenTrailHistory.shift();
+        }
+
+        if (g.x < -ParticleScene.GOLDEN_RADIUS * 4) {
+          this.golden = null;
+          this.goldenTrailHistory.length = 0;
+          this.goldenSpawnTimer = ParticleScene.randomGoldenInterval();
+        }
       }
     } else {
       this.goldenSpawnTimer -= dt;
@@ -688,6 +735,32 @@ export class ParticleScene {
     this.trailHistory.push(this.bob);
     if (this.trailHistory.length > ParticleScene.TRAIL_SAMPLES) this.trailHistory.shift();
 
+    // Golden click-boost: continuous gold spark trickle off the main
+    // particle's rim, same technique as the golden particle's own ambient
+    // emission — the ongoing "you are currently supercharged" cue, alongside
+    // the pulsing aura ring in drawBoostAura(). Fed by goldenBoostFraction
+    // (set above), not a local timer state, so it starts/stops exactly when
+    // the boost does with no separate on/off bookkeeping needed here.
+    if (this.goldenBoostFraction > 0) {
+      this.goldenBoostEmitTimer -= dt;
+      if (this.goldenBoostEmitTimer <= 0) {
+        this.goldenBoostEmitTimer = 0.02 + Math.random() * 0.03;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 40 + Math.random() * 120;
+        const edge = this.particleRadius();
+        this.sparks.push({
+          x: this.particleVisualX + Math.cos(angle) * edge,
+          y: this.particleY + Math.sin(angle) * edge,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          age: 0,
+          life: 0.35 + Math.random() * 0.35,
+          size: 1 + Math.random() * 1.8,
+          gold: true,
+        });
+      }
+    }
+
     // Exponential decay — most of the punch is gone within ~250ms, reading
     // as a snappy bounce rather than a lingering pulse.
     this.pulse *= Math.exp(-dt * 11);
@@ -727,6 +800,7 @@ export class ParticleScene {
     this.drawStreaks(p);
     this.drawGolden();
     this.drawRuler(PARTICLE_PALETTE);
+    this.drawBoostAura();
     this.drawParticle(PARTICLE_PALETTE);
     this.drawSparks(PARTICLE_PALETTE);
     this.drawRipples(PARTICLE_PALETTE);
@@ -776,6 +850,42 @@ export class ParticleScene {
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  /** Circle-circle overlap test between the main particle and the golden
+   * particle, using each one's actual current on-screen radius (so the catch
+   * radius grows with visualSpeed/pulse right along with the main particle's
+   * drawn size) plus GOLDEN_CATCH_MARGIN of forgiveness. */
+  private checkGoldenCatch(g: GoldenParticle): boolean {
+    const dx = g.x - this.particleVisualX;
+    const dy = g.y - this.particleY;
+    const dist = Math.hypot(dx, dy);
+    return dist < this.particleRadius() + ParticleScene.GOLDEN_RADIUS + ParticleScene.GOLDEN_CATCH_MARGIN;
+  }
+
+  /** Catch payoff: a bigger, gold-colored spark burst plus a "CAUGHT!" label,
+   * centered on the golden particle at the moment of the catch — reuses the
+   * same sparks/floating arrays as click feedback (addClickEffect), just
+   * larger. The click-boost itself (later step) is applied outside this
+   * class; this is purely the catch's visual payoff. */
+  private spawnGoldenCatchBurst(x: number, y: number): void {
+    this.floating.push({ x, y, text: 'CAUGHT!', age: 0 });
+    this.pulse = 1;
+    const count = 18;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 140 + Math.random() * 340;
+      this.sparks.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        age: 0,
+        life: 0.5 + Math.random() * 0.5,
+        size: 1.2 + Math.random() * 2.2,
+        gold: true,
+      });
+    }
   }
 
   /** Renders the golden particle (see GoldenParticle) with a pulsing glow and
@@ -1001,6 +1111,35 @@ export class ParticleScene {
       ctx.fillStyle = 'rgba(220,228,242,0.6)';
       ctx.fillText(this.rulerUnit, this.width - 12, this.height - 10);
     }
+  }
+
+  /** Pulsing gold ring around the main particle while a golden-catch click
+   * boost is active — a continuous loop (not a one-shot Ripple) so it reads
+   * as an ongoing state rather than a moment-in-time effect, and eases out
+   * over the boost's final ~7.5s (goldenBoostFraction < 0.25) as an early
+   * "about to end" cue rather than cutting off abruptly at zero. */
+  private drawBoostAura(): void {
+    if (this.goldenBoostFraction <= 0) return;
+    const { ctx } = this;
+    const cx = this.particleVisualX;
+    const cy = this.particleY;
+    const baseR = this.particleRadius();
+    const fadeOut = Math.min(1, this.goldenBoostFraction * 4);
+    const cycle = 0.9;
+    for (let i = 0; i < 2; i++) {
+      const phase = ((this.time + i * cycle * 0.5) % cycle) / cycle;
+      const ringR = baseR + 6 + phase * 22;
+      ctx.globalAlpha = (1 - phase) * 0.5 * fadeOut;
+      ctx.strokeStyle = GOLD_PALETTE.mid;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = GOLD_PALETTE.glow;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
   }
 
   private drawParticle(p: EraPalette): void {

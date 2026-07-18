@@ -1,4 +1,4 @@
-import { CLICK_RATE_CAP } from '../core/constants';
+import { CLICK_RATE_CAP, GOLDEN_BOOST_DURATION_SEC } from '../core/constants';
 import { PERCENT_C_UNLOCK } from '../core/content';
 import { distanceRate, generatorSpeed, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
@@ -39,6 +39,10 @@ export interface StageFrame {
    * heavily log-compressed overall speed level (see ParticleScene.update). */
   clickIntensity: number;
   ruler: RulerReading;
+  /** 0..1, goldenBoostActiveSec / GOLDEN_BOOST_DURATION_SEC — drives the
+   * scene's gold aura/spark effect on the main particle while a golden-catch
+   * click boost is active (see ParticleScene.update). */
+  goldenBoostFraction: number;
 }
 
 export function updateStage(state: GameState, refs: UiRefs): StageFrame {
@@ -73,10 +77,18 @@ export function updateStage(state: GameState, refs: UiRefs): StageFrame {
 
   const clickIntensity = state.clickRate / CLICK_RATE_CAP;
 
+  const goldenBoostFraction = Math.max(
+    0,
+    Math.min(1, state.goldenBoostActiveSec / GOLDEN_BOOST_DURATION_SEC),
+  );
+  refs.boostBanner.classList.toggle('is-hidden', goldenBoostFraction <= 0);
+  refs.boostBarFill.style.width = `${Math.round(goldenBoostFraction * 100)}%`;
+
   return {
     visualFraction: fraction,
     clickIntensity,
     ruler: { symbol, distanceInUnit: raw, speedInUnitPerSec },
+    goldenBoostFraction,
   };
 }
 

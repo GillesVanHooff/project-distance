@@ -15,6 +15,9 @@ export interface UiRefs {
   percentCWrap: HTMLElement;
   percentCValue: HTMLElement;
   speedBarFill: HTMLElement;
+  boostBanner: HTMLElement;
+  boostMultValue: HTMLElement;
+  boostBarFill: HTMLElement;
   clickHint: HTMLElement;
   offlineOverlay: HTMLElement;
   offlineDuration: HTMLElement;
@@ -60,6 +63,9 @@ export function queryRefs(): UiRefs {
     percentCWrap: req('percent-c-wrap'),
     percentCValue: req('percent-c-value'),
     speedBarFill: req('speed-bar-fill'),
+    boostBanner: req('boost-banner'),
+    boostMultValue: req('boost-mult-value'),
+    boostBarFill: req('boost-bar-fill'),
     clickHint: req('click-hint'),
     offlineOverlay: req('offline-overlay'),
     offlineDuration: req('offline-duration'),

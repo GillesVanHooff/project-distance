@@ -36,6 +36,8 @@ export interface GameState {
   /** Burst ability timers (seconds remaining). */
   burstActiveSec: number;
   burstCooldownSec: number;
+  /** Golden-catch click boost (seconds remaining) — like the burst timers, transient and not persisted. */
+  goldenBoostActiveSec: number;
   /** Token bucket for click diminishing returns. */
   clickBucket: number;
   /** Live clicks/sec rate meter (leaky bucket: +CLICK_RATE_IMPULSE per click, exponential decay per tick). */
@@ -59,6 +61,7 @@ export function newGame(): GameState {
     runTimeSec: 0,
     burstActiveSec: 0,
     burstCooldownSec: 0,
+    goldenBoostActiveSec: 0,
     clickBucket: 5,
     clickRate: 0,
   };

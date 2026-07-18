@@ -72,6 +72,13 @@ export const BURST_MULTIPLIER = 4;
 export const BURST_DURATION_SEC = 10;
 export const BURST_COOLDOWN_SEC = 90;
 
+/** Golden particle catch payoff (see render/scene.ts's GoldenParticle): a
+ * short, very powerful click multiplier — no cooldown of its own since the
+ * golden particle's own random spawn timer is the rate limiter. Stacks
+ * multiplicatively with burst if both happen to be active at once. */
+export const GOLDEN_BOOST_MULTIPLIER = 20;
+export const GOLDEN_BOOST_DURATION_SEC = 30;
+
 /** Time machine (prestige shop): each level doubles time compression. Cost = 3^level crystals. */
 export const TIME_MACHINE_BASE_COST = 1;
 export const TIME_MACHINE_COST_GROWTH = 3;
