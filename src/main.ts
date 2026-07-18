@@ -121,6 +121,17 @@ function main(): void {
     hideClickHint(refs);
   });
 
+  // Mouse-follow: the particle chases the pointer anywhere over the scene,
+  // and eases back to its normal idle drift the moment the pointer leaves —
+  // off the canvas edge, onto a side menu, or out of the window entirely.
+  refs.scene.addEventListener('pointermove', (e) => {
+    if (inputLocked) return;
+    const rect = refs.sceneCanvas.getBoundingClientRect();
+    scene.setPointer(e.clientX - rect.left, e.clientY - rect.top);
+  });
+  refs.scene.addEventListener('pointerleave', () => scene.setPointer(null, null));
+  window.addEventListener('blur', () => scene.setPointer(null, null));
+
   function onPrestiged(): void {
     recentLog = [];
     milestoneCount = 0;

@@ -59,6 +59,9 @@ interface Spark {
   age: number;
   life: number;
   size: number;
+  /** Gold-colored variant (see GOLD_PALETTE) used for the golden particle's
+   * ambient trickle — everything else about a spark's behavior is identical. */
+  gold?: boolean;
 }
 
 /** Faint drifting background dust — purely ambient, unrelated to game state.
@@ -175,6 +178,32 @@ const ERA_PALETTES: EraPalette[] = [
 // color is not part of that spec).
 const PARTICLE_PALETTE = ERA_PALETTES[0]!;
 
+// Golden particle (see GoldenParticle): fixed gold palette, independent of
+// era — it needs to read as the same "rare bonus" object no matter where the
+// player is in the run, not blend into whatever the current era looks like.
+const GOLD_PALETTE = {
+  core: '#FFF6D8',
+  mid: '#FFD24C',
+  edge: '#C98A1F',
+  glow: 'rgba(255,210,76,0.7)',
+};
+
+/** The rare bonus particle (CLAUDE.md-adjacent fun feature, not in the design
+ * doc): spawns off the right edge every now and then and drifts slowly left,
+ * independent of the parallax/scroll fields since it's an anomaly, not part
+ * of the background. Catching it is added in a later step. */
+interface GoldenParticle {
+  x: number;
+  y: number;
+  vx: number; // px/sec, negative (drifts left)
+  /** Vertical random-walk velocity — see the wander block in update(). Bounces
+   * off the safe band's top/bottom instead of clamping, so it keeps wandering
+   * rather than sticking to an edge. */
+  vy: number;
+  vyTarget: number;
+  vyTimer: number;
+}
+
 const UNIT_ERA: Record<string, number> = {
   ℓₚ: 0,
   nm: 0,
@@ -230,6 +259,62 @@ export class ParticleScene {
   // traces the particle's actual up/down path instead of a flat line.
   private readonly trailHistory: number[] = [];
   private static readonly TRAIL_SAMPLES = 24;
+
+  // Mouse-follow (see setPointer()): canvas-local pointer position, or null
+  // when the pointer is outside the scene. followX/Y chase the clamped
+  // pointer position; followBlend eases their *contribution* to bob/bobX in
+  // and out, so leaving the canvas doesn't snap the particle to a frozen spot
+  // but eases it back into whatever the idle sine+wobble path is doing at
+  // that moment — "original position and movement", not a fixed point.
+  private pointer: { x: number; y: number } | null = null;
+  private followX = 0;
+  private followY = 0;
+  private followBlend = 0;
+  private static readonly FOLLOW_CHASE_RATE = 12;
+  private static readonly FOLLOW_BLEND_RATE = 6;
+
+  // Golden particle (see GoldenParticle) — one at a time, spawned on a random
+  // timer so it reads as "every now and then" rather than a predictable beat.
+  private golden: GoldenParticle | null = null;
+  private goldenSpawnTimer = ParticleScene.randomGoldenInterval();
+  // Countdown to the next ambient trickle spark while golden is alive — see
+  // the emit block in update(). Starts at 0 so the first spark appears
+  // immediately on spawn instead of after a delay.
+  private goldenEmitTimer = 0;
+  // Recent absolute (x,y) positions (oldest first) — drawn as a smooth curve
+  // through midpoints in drawGolden(), same technique as the main particle's
+  // trailHistory (drawParticle), but storing real points rather than a bob
+  // offset since golden actually travels in both x and y. Cleared on
+  // despawn/respawn so a new golden never draws a stale line back to where
+  // the last one exited.
+  private readonly goldenTrailHistory: { x: number; y: number }[] = [];
+  // High sample count is deliberate: per-frame displacement is small (the
+  // particle drifts slowly), so a short history reads as basically nothing —
+  // most of it falls inside the core's own glow radius. This needs to span
+  // ~1.5s of motion (~90-130px) to actually read as a comet tail.
+  private static readonly GOLDEN_TRAIL_SAMPLES = 180;
+  private static readonly GOLDEN_SPAWN_MIN_SEC = 10;
+  private static readonly GOLDEN_SPAWN_MAX_SEC = 20;
+  private static readonly GOLDEN_SPEED_PX_PER_SEC = 55;
+  private static readonly GOLDEN_RADIUS = 9;
+  // Keeps the golden particle clear of the speed bar HTML overlay
+  // (.stage__speed-bar in _stage.scss: top:46px, height:5px — bottom edge at
+  // 51px in the same CSS-pixel space the canvas draws in) plus its own radius
+  // and a little breathing room, so it never wanders behind/above the bar.
+  private static readonly GOLDEN_TOP_CLEARANCE = 72;
+  // Vertical wander: how strongly the random-walk vy retargets (px/sec) and
+  // how often, and how fast vy eases toward that retargeted value — "quite
+  // randomly" per the brief, so this is deliberately punchier than the main
+  // particle's own idle wobble.
+  private static readonly GOLDEN_VY_MAX = 55;
+  private static readonly GOLDEN_VY_EASE_RATE = 3;
+
+  private static randomGoldenInterval(): number {
+    return (
+      ParticleScene.GOLDEN_SPAWN_MIN_SEC +
+      Math.random() * (ParticleScene.GOLDEN_SPAWN_MAX_SEC - ParticleScene.GOLDEN_SPAWN_MIN_SEC)
+    );
+  }
   // Per-click grow-then-shrink punch: snaps to 1 on click, exponentially
   // decays back to 0 — reused both as the particle's radius bump and as the
   // ripple's growth curve so the two visually agree.
@@ -330,6 +415,13 @@ export class ParticleScene {
     this.palette = ERA_PALETTES[idx]!;
   }
 
+  /** Canvas-local pointer position for the mouse-follow behavior (see update()),
+   * or null once the pointer leaves the scene — main.ts forwards
+   * pointermove/pointerleave (and window blur) here. */
+  setPointer(x: number | null, y: number | null): void {
+    this.pointer = x !== null && y !== null ? { x, y } : null;
+  }
+
   /** Spawn a floating label at a client-space point (e.g. from a MouseEvent), and
    * punch the particle — the ripple emanates from the particle itself, not the
    * click position, so it isn't positioned here. */
@@ -381,10 +473,16 @@ export class ParticleScene {
     return this.particleX + this.bobX;
   }
 
+  /** Vertical anchor the particle sits at before bob/follow is applied — shared
+   * by particleY and the mouse-follow clamp in update() so both agree on center. */
+  private get particleBaseY(): number {
+    return this.height * 0.42;
+  }
+
   /** Vertical position the particle sits at right now, bob included — ripples
    * are drawn here every frame so they track the particle as it bobs. */
   private get particleY(): number {
-    return this.height * 0.42 + this.bob;
+    return this.particleBaseY + this.bob;
   }
 
   /** Current on-screen radius of the particle core (speed growth + click pulse
@@ -420,6 +518,88 @@ export class ParticleScene {
       const d = this.dust[i]!;
       d.x -= dustSpeed * d.depth * dt;
       if (d.x < -20) this.dust[i] = this.spawnDust(this.width + 20);
+    }
+
+    // Golden particle: drifts left at a constant horizontal speed,
+    // independent of scroll/visualSpeed (it's an anomaly passing through, not
+    // part of the background), while wandering vertically. One at a time;
+    // despawns and restarts the random timer once it exits, whether or not it
+    // was caught (catching lands in a later step and will clear `golden`
+    // itself before this despawn check runs).
+    const goldenTopMargin = ParticleScene.GOLDEN_TOP_CLEARANCE;
+    const goldenRulerBandTop =
+      this.height - ParticleScene.RULER_BOTTOM_OFFSET - ParticleScene.RULER_LABEL_CLEARANCE;
+    const goldenBottomMargin = goldenRulerBandTop - 20;
+    if (this.golden) {
+      const g = this.golden;
+      g.x += g.vx * dt;
+
+      // Vertical random walk: retarget vyTarget on a short timer, ease vy
+      // toward it, then integrate — bounce off the safe band's edges (flip
+      // vy/vyTarget) instead of clamping, so it keeps wandering rather than
+      // pinning to an edge.
+      g.vyTimer -= dt;
+      if (g.vyTimer <= 0) {
+        g.vyTarget = (Math.random() * 2 - 1) * ParticleScene.GOLDEN_VY_MAX;
+        g.vyTimer = 0.4 + Math.random() * 0.6;
+      }
+      g.vy += (g.vyTarget - g.vy) * (1 - Math.exp(-ParticleScene.GOLDEN_VY_EASE_RATE * dt));
+      g.y += g.vy * dt;
+      if (g.y < goldenTopMargin) {
+        g.y = goldenTopMargin;
+        g.vy = Math.abs(g.vy);
+        g.vyTarget = Math.abs(g.vyTarget);
+      } else if (g.y > goldenBottomMargin) {
+        g.y = goldenBottomMargin;
+        g.vy = -Math.abs(g.vy);
+        g.vyTarget = -Math.abs(g.vyTarget);
+      }
+
+      // Ambient trickle of small gold sparks, purely decorative, reusing the
+      // same Spark array/physics/fade the click burst uses (see
+      // addClickEffect) — just smaller, dimmer, and continuous rather than a
+      // one-shot burst.
+      this.goldenEmitTimer -= dt;
+      if (this.goldenEmitTimer <= 0) {
+        this.goldenEmitTimer = 0.025 + Math.random() * 0.035;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 14 + Math.random() * 38;
+        this.sparks.push({
+          x: g.x,
+          y: g.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          age: 0,
+          life: 0.5 + Math.random() * 0.5,
+          size: 1 + Math.random() * 1.6,
+          gold: true,
+        });
+      }
+
+      this.goldenTrailHistory.push({ x: g.x, y: g.y });
+      if (this.goldenTrailHistory.length > ParticleScene.GOLDEN_TRAIL_SAMPLES) {
+        this.goldenTrailHistory.shift();
+      }
+
+      if (g.x < -ParticleScene.GOLDEN_RADIUS * 4) {
+        this.golden = null;
+        this.goldenTrailHistory.length = 0;
+        this.goldenSpawnTimer = ParticleScene.randomGoldenInterval();
+      }
+    } else {
+      this.goldenSpawnTimer -= dt;
+      if (this.goldenSpawnTimer <= 0) {
+        this.golden = {
+          x: this.width + ParticleScene.GOLDEN_RADIUS * 3,
+          y:
+            goldenTopMargin +
+            Math.random() * Math.max(10, goldenBottomMargin - goldenTopMargin),
+          vx: -ParticleScene.GOLDEN_SPEED_PX_PER_SEC,
+          vy: 0,
+          vyTarget: (Math.random() * 2 - 1) * ParticleScene.GOLDEN_VY_MAX,
+          vyTimer: 0.4 + Math.random() * 0.6,
+        };
+      }
     }
 
     this.rulerDistance = ruler.distanceInUnit;
@@ -474,8 +654,37 @@ export class ParticleScene {
     const wobbleRateX = 2 + this.visualSpeed * 4;
     this.wobbleX += (this.wobbleTargetX - this.wobbleX) * (1 - Math.exp(-wobbleRateX * dt));
 
-    this.bob = Math.sin(this.time * 1.6) * 2 + this.wobbleY;
-    this.bobX = Math.sin(this.time * 1.1 + 1.7) * 1 + this.wobbleX;
+    // Mouse-follow: chase the clamped pointer position while it's present —
+    // clamped so the particle can't hide behind the ruler or clip the canvas
+    // edges. followBlend (updated below regardless of pointer state) handles
+    // the actual crossfade into/out of this.
+    if (this.pointer) {
+      const margin = this.particleRadius() + 8;
+      const rulerBandTop =
+        this.height - ParticleScene.RULER_BOTTOM_OFFSET - ParticleScene.RULER_LABEL_CLEARANCE;
+      const targetFollowY = Math.max(
+        margin - this.particleBaseY,
+        Math.min(rulerBandTop - margin - this.particleBaseY, this.pointer.y - this.particleBaseY),
+      );
+      const targetFollowX = Math.max(
+        margin - this.particleX,
+        Math.min(this.width - margin - this.particleX, this.pointer.x - this.particleX),
+      );
+      const chase = 1 - Math.exp(-ParticleScene.FOLLOW_CHASE_RATE * dt);
+      this.followY += (targetFollowY - this.followY) * chase;
+      this.followX += (targetFollowX - this.followX) * chase;
+    }
+    const followTarget = this.pointer ? 1 : 0;
+    this.followBlend +=
+      (followTarget - this.followBlend) * (1 - Math.exp(-ParticleScene.FOLLOW_BLEND_RATE * dt));
+
+    // Idle path — exactly what bob/bobX were before mouse-follow existed.
+    // followBlend lerps between this and the chased follow position, so at
+    // rest (followBlend === 0, the common case) bob/bobX are unchanged.
+    const idleBobY = Math.sin(this.time * 1.6) * 2 + this.wobbleY;
+    const idleBobX = Math.sin(this.time * 1.1 + 1.7) * 1 + this.wobbleX;
+    this.bob = idleBobY + (this.followY - idleBobY) * this.followBlend;
+    this.bobX = idleBobX + (this.followX - idleBobX) * this.followBlend;
     this.trailHistory.push(this.bob);
     if (this.trailHistory.length > ParticleScene.TRAIL_SAMPLES) this.trailHistory.shift();
 
@@ -516,6 +725,7 @@ export class ParticleScene {
     this.drawGrid(p);
     this.drawDust(p);
     this.drawStreaks(p);
+    this.drawGolden();
     this.drawRuler(PARTICLE_PALETTE);
     this.drawParticle(PARTICLE_PALETTE);
     this.drawSparks(PARTICLE_PALETTE);
@@ -568,13 +778,74 @@ export class ParticleScene {
     ctx.globalAlpha = 1;
   }
 
+  /** Renders the golden particle (see GoldenParticle) with a pulsing glow and
+   * a comet trail — same radial-gradient core and quadratic-curve-through-
+   * midpoints trail technique as the main particle (drawParticle), tracing
+   * goldenTrailHistory's real recent positions instead of a bob offset. */
+  private drawGolden(): void {
+    if (!this.golden) return;
+    const { ctx } = this;
+    const g = this.golden;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
+    const r = ParticleScene.GOLDEN_RADIUS + pulse * 2;
+
+    const hist = this.goldenTrailHistory;
+    if (hist.length > 1) {
+      const n = hist.length;
+      const trailGrad = ctx.createLinearGradient(hist[0]!.x, hist[0]!.y, g.x, g.y);
+      trailGrad.addColorStop(0, 'transparent');
+      trailGrad.addColorStop(0.65, GOLD_PALETTE.glow);
+      trailGrad.addColorStop(1, GOLD_PALETTE.mid);
+      ctx.strokeStyle = trailGrad;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = GOLD_PALETTE.glow;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(hist[0]!.x, hist[0]!.y);
+      // Quadratic-through-midpoints: same curve-smoothing trick as the main
+      // particle's trail (drawParticle) — turns the raw point sequence into a
+      // smooth curve instead of a jagged polyline.
+      for (let i = 1; i < n - 1; i++) {
+        const mid = { x: (hist[i]!.x + hist[i + 1]!.x) / 2, y: (hist[i]!.y + hist[i + 1]!.y) / 2 };
+        ctx.quadraticCurveTo(hist[i]!.x, hist[i]!.y, mid.x, mid.y);
+      }
+      ctx.lineTo(g.x, g.y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    const coreGrad = ctx.createRadialGradient(g.x - r * 0.25, g.y - r * 0.25, 1, g.x, g.y, r);
+    coreGrad.addColorStop(0, GOLD_PALETTE.core);
+    coreGrad.addColorStop(0.6, GOLD_PALETTE.mid);
+    coreGrad.addColorStop(1, GOLD_PALETTE.edge);
+
+    ctx.shadowColor = GOLD_PALETTE.glow;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = coreGrad;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
   private drawSparks(p: EraPalette): void {
     const { ctx } = this;
     for (const s of this.sparks) {
       const t = s.age / s.life;
-      ctx.globalAlpha = (1 - t) * 0.75;
-      ctx.fillStyle = t < 0.5 ? p.particleCore : p.particleMid;
-      ctx.shadowColor = p.glow;
+      // Gold trickle sparks (golden particle's ambient emission) run at
+      // roughly the same visibility as click sparks — this is the thing
+      // that's supposed to catch the player's eye, not a background detail.
+      ctx.globalAlpha = (1 - t) * (s.gold ? 0.8 : 0.75);
+      ctx.fillStyle = s.gold
+        ? t < 0.5
+          ? GOLD_PALETTE.core
+          : GOLD_PALETTE.mid
+        : t < 0.5
+          ? p.particleCore
+          : p.particleMid;
+      ctx.shadowColor = s.gold ? GOLD_PALETTE.glow : p.glow;
       ctx.shadowBlur = 4;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size * (1 - t * 0.6), 0, Math.PI * 2);
@@ -735,7 +1006,7 @@ export class ParticleScene {
   private drawParticle(p: EraPalette): void {
     const { ctx } = this;
     const px = this.particleVisualX;
-    const py = this.height * 0.42;
+    const py = this.particleBaseY;
     const bob = this.bob;
 
     // No trail at rest, growing toward a longer max (~0.30 of width, up from
