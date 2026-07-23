@@ -82,6 +82,35 @@ function toSuperscript(n: number): string {
   return String(n).split('').map((c) => SUPERSCRIPTS[c] ?? c).join('');
 }
 
+const DIGITS_FROM_SUPERSCRIPT: Record<string, string> = Object.fromEntries(
+  Object.entries(SUPERSCRIPTS).map(([digit, sup]) => [sup, digit]),
+);
+
+/** Split a string produced with html=false (e.g. formatDistanceStr, formatScientific)
+ * into plain/exponent runs, converting the Unicode superscript characters back to
+ * normal digits. Canvas fillText can't render `<sup>` markup, so it renders those
+ * Unicode glyphs directly — but they're tiny and hard to read at small font sizes.
+ * Callers that need a legible canvas exponent (see scene.ts's drawFloatingText) use
+ * this to draw the exponent run in its own smaller-but-controlled font size and
+ * raised baseline, mirroring what CSS `sup` does for the HTML-rendered version. */
+export function splitSuperscript(text: string): { text: string; sup: boolean }[] {
+  const segments: { text: string; sup: boolean }[] = [];
+  let current = '';
+  let currentSup = false;
+  for (const ch of text) {
+    const digit = DIGITS_FROM_SUPERSCRIPT[ch];
+    const isSup = digit !== undefined;
+    if (current && isSup !== currentSup) {
+      segments.push({ text: current, sup: currentSup });
+      current = '';
+    }
+    current += isSup ? digit : ch;
+    currentSup = isSup;
+  }
+  if (current) segments.push({ text: current, sup: currentSup });
+  return segments;
+}
+
 function findUnitRow(meters: Decimal): UnitRow | undefined {
   let row: UnitRow | undefined;
   for (const r of UNIT_LADDER) {

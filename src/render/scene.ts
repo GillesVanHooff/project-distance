@@ -6,7 +6,7 @@
  * to it each frame.
  */
 
-import { formatMagnitude } from '../core/units';
+import { formatMagnitude, splitSuperscript } from '../core/units';
 
 interface RulerInput {
   /** Symbol of the unit distanceInUnit/speedInUnitPerSec are expressed in (e.g. "nm", "km"). */
@@ -225,6 +225,9 @@ export class ParticleScene {
   private width = 0;
   private height = 0;
   private readonly streaks: Streak[];
+  // Click-feedback popup ("+N ℓₚ") lifetime — short enough that a burst of
+  // clicks doesn't stack up a trail of overlapping labels above the particle.
+  private static readonly FLOAT_TEXT_LIFETIME_SEC = 0.85;
   private floating: FloatingText[] = [];
   private ripples: Ripple[] = [];
   private sparks: Spark[] = [];
@@ -449,13 +452,13 @@ export class ParticleScene {
     return caught;
   }
 
-  /** Spawn a floating label at a client-space point (e.g. from a MouseEvent), and
-   * punch the particle — the ripple emanates from the particle itself, not the
-   * click position, so it isn't positioned here. */
-  addClickEffect(clientX: number, clientY: number, label: string): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+  /** Spawn a floating label above the particle and punch it — everything about
+   * click feedback (label, ripple, burst) anchors to the particle itself, not
+   * the click/cursor position, so it reads as the particle reacting rather
+   * than debris spawning wherever the pointer happened to be. */
+  addClickEffect(label: string): void {
+    const x = this.particleVisualX;
+    const y = this.particleY - this.particleRadius() - 12;
     this.floating.push({ x, y, text: label, age: 0 });
     this.pulse = 1;
     this.ripples.push({ age: 0, startRadius: this.particleRadius() });
@@ -767,7 +770,7 @@ export class ParticleScene {
     this.pulse *= Math.exp(-dt * 11);
 
     for (const f of this.floating) f.age += dt;
-    this.floating = this.floating.filter((f) => f.age < 1.4);
+    this.floating = this.floating.filter((f) => f.age < ParticleScene.FLOAT_TEXT_LIFETIME_SEC);
     for (const r of this.ripples) r.age += dt;
     this.ripples = this.ripples.filter((r) => r.age < 0.6);
 
@@ -1240,16 +1243,39 @@ export class ParticleScene {
     ctx.globalAlpha = 1;
   }
 
+  // Click-popup text sizing: bigger than the old 13px so it's readable at a
+  // glance, plus a manual superscript (own font size + raised baseline —
+  // mirrors the `sup { font-size: 0.62em; top: -0.5em }` CSS rule used for
+  // the HTML-rendered odometer) instead of the Unicode superscript glyphs,
+  // which stay tiny and hard to read even as the base font size grows.
+  private static readonly FLOAT_TEXT_BASE_PX = 18;
+  private static readonly FLOAT_TEXT_SUP_PX = Math.round(ParticleScene.FLOAT_TEXT_BASE_PX * 0.62);
+
   private drawFloatingText(p: EraPalette): void {
     const { ctx } = this;
-    ctx.font = '600 13px "IBM Plex Mono", monospace';
-    ctx.textAlign = 'center';
+    const { FLOAT_TEXT_BASE_PX: baseFont, FLOAT_TEXT_SUP_PX: supFont } = ParticleScene;
+    const supRise = supFont * 0.5;
+    ctx.textAlign = 'left';
     for (const f of this.floating) {
-      const t = f.age / 1.4;
-      ctx.globalAlpha = 1 - t;
+      const t = f.age / ParticleScene.FLOAT_TEXT_LIFETIME_SEC;
+      ctx.globalAlpha = Math.max(0, 1 - t);
       ctx.fillStyle = p.particleCore;
-      ctx.fillText(f.text, f.x, f.y - t * 36);
+      const y = f.y - t * 30;
+      const segments = splitSuperscript(f.text);
+
+      let width = 0;
+      for (const seg of segments) {
+        ctx.font = `700 ${seg.sup ? supFont : baseFont}px "IBM Plex Mono", monospace`;
+        width += ctx.measureText(seg.text).width;
+      }
+      let x = f.x - width / 2;
+      for (const seg of segments) {
+        ctx.font = `700 ${seg.sup ? supFont : baseFont}px "IBM Plex Mono", monospace`;
+        ctx.fillText(seg.text, x, seg.sup ? y - supRise : y);
+        x += ctx.measureText(seg.text).width;
+      }
     }
     ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
   }
 }

@@ -122,10 +122,10 @@ function main(): void {
     renderShop(state, refs, activeTab);
   });
 
-  refs.scene.addEventListener('click', (e) => {
+  refs.scene.addEventListener('click', () => {
     if (inputLocked) return;
     const gained = click(state);
-    scene.addClickEffect(e.clientX, e.clientY, `+${formatDistanceStr(gained)}`);
+    scene.addClickEffect(`+${formatDistanceStr(gained)}`);
     hideClickHint(refs);
   });
 
