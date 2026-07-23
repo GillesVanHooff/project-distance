@@ -138,6 +138,13 @@ const MOMENTUM_COSTS = ['5e21', '5e29', '5e37'];
  * MULTIPLIER_BASE_COST × MULTIPLIER_COST_SPACING^N, so each is ~100× the
  * last — buying through the whole list should feel like a steady drumbeat
  * (one purchase every several minutes), not a pile bought all at once.
+ *
+ * Unlock gates are progressive too (not a single shared gate): the Nth
+ * upgrade (0-indexed) unlocks at 10^(N-7) meters, i.e. one order of
+ * magnitude further per upgrade, 100nm through 1km. That range sits inside
+ * the 0:18–0:45 mechanical-unlock window (CLAUDE.md), so the whole chain
+ * reveals itself gradually rather than dumping all 11 "locked" teasers on
+ * the player at once with the same distance.
  */
 export const MULTIPLIER_COUNT = 11;
 export const MULTIPLIER_BASE_COST = D('1e25');
@@ -209,7 +216,7 @@ export const UPGRADES: UpgradeDef[] = [
       describe: () => `×${multiplierValue(i)} all production`,
       maxLevel: 1,
       cost: () => MULTIPLIER_BASE_COST.mul(D(MULTIPLIER_COST_SPACING).pow(i)),
-      unlock: metersToPlanck(1e-7),
+      unlock: metersToPlanck(10 ** (i - 7)),
     }),
   ),
   {

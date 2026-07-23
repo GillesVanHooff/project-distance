@@ -170,8 +170,17 @@ function renderGenerators(state: GameState): string {
 }
 
 function renderUpgradeList(state: GameState, filter: (u: (typeof UPGRADES)[number]) => boolean): string {
+  // Only the nearest locked upgrade is shown as a teaser — chains like the
+  // multiplier upgrades unlock progressively (content.ts), so once one
+  // locked row has been shown, every later one is just "further away" and
+  // would otherwise repeat the same teaser pattern down the whole list.
+  let lockedShown = false;
   const rows = UPGRADES.filter(filter).map((def) => {
-    if (!upgradeUnlocked(state, def.id)) return lockedRow(def.unlock);
+    if (!upgradeUnlocked(state, def.id)) {
+      if (lockedShown) return '';
+      lockedShown = true;
+      return lockedRow(def.unlock);
+    }
 
     const level = upgradeLevel(state, def.id);
     if (level >= def.maxLevel) {
