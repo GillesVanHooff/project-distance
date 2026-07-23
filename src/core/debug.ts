@@ -53,11 +53,11 @@ export function debugAddCrystals(state: GameState, amount: Decimal = D(5)): void
  *
  * Deliberately spaced evenly in raw ℓₚ/s log-space rather than in real-world
  * units (m/s, km/s, ...): the speed bar (visualSpeedFraction in ui/stage.ts)
- * is itself log-mapped across the full 1 ℓₚ/s-to-c range, and a Planck length
- * is so small that any humanly-readable speed (even 1 m/s ≈ 6e34 ℓₚ/s) already
- * sits at ~81% up that bar. A ladder built from real-world speeds therefore
- * filled the bar to ~81% on the very first press — reading as "instantly at
- * lightspeed" — before creeping through the last stretch on later presses.
+ * is itself log-mapped (then power-curved) across the full 1 ℓₚ/s-to-c range,
+ * so a ladder built from real-world speeds would bunch nearly every rung into
+ * the bar's first ~50% (all of mm/s through km/s) and leave only the last few
+ * rungs to cover the actual approach to c — the opposite of what this ladder
+ * is for, which is testing that final stretch one rung at a time.
  *
  * One rung per OoM (not two) so more presses land inside the last 10% of the
  * bar: ParticleScene's HYPERSPACE_START (render/scene.ts) eases in the

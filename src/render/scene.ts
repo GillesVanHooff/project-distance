@@ -299,11 +299,12 @@ export class ParticleScene {
   private static readonly GOLDEN_SPAWN_MAX_SEC = 20;
   private static readonly GOLDEN_SPEED_PX_PER_SEC = 55;
   private static readonly GOLDEN_RADIUS = 9;
-  // Keeps the golden particle clear of the speed bar HTML overlay
-  // (.stage__speed-bar in _stage.scss: top:46px, height:5px — bottom edge at
-  // 51px in the same CSS-pixel space the canvas draws in) plus its own radius
-  // and a little breathing room, so it never wanders behind/above the bar.
-  private static readonly GOLDEN_TOP_CLEARANCE = 72;
+  // Keeps the golden particle clear of the speed bar + speed/%c readout row
+  // (.stage__speed-bar + .stage__scene-header in _stage.scss: bar is top:0
+  // height:10px, header sits right below it and its text ends around y≈43px
+  // in the same CSS-pixel space the canvas draws in) plus the particle's own
+  // radius and a little breathing room, so it never wanders behind/above them.
+  private static readonly GOLDEN_TOP_CLEARANCE = 64;
   // Vertical wander: how strongly the random-walk vy retargets (px/sec) and
   // how often, and how fast vy eases toward that retargeted value — "quite
   // randomly" per the brief, so this is deliberately punchier than the main

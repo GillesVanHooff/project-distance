@@ -126,8 +126,8 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 0;
-  padding: 16px 22px 0 22px;
+  top: 10px;
+  padding: 10px 22px 0 22px;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -159,12 +159,11 @@
 
 .stage__speed-bar {
   position: absolute;
-  left: 22px;
-  right: 22px;
-  top: 46px;
-  height: 5px;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 10px;
   background: $tab-bg;
-  border-radius: 3px;
   overflow: hidden;
 }
 
@@ -172,19 +171,18 @@
   width: 0%;
   height: 100%;
   background: linear-gradient(90deg, $accent-blue-dark, $accent-blue);
-  border-radius: 3px;
   box-shadow: 0 0 8px rgba(76, 141, 255, 0.6);
   transition: width 0.2s ease-out;
 }
 
 // Golden click-boost banner (see main.ts's activateGoldenBoost wiring):
-// visible only while the boost is active, pinned just below the speed bar —
+// visible only while the boost is active, pinned just below the speed row —
 // the ongoing "you are currently supercharged" readout, separate from the
 // scene's own gold aura/spark effect on the particle itself.
 .stage__boost {
   position: absolute;
   left: 50%;
-  top: 60px;
+  top: 48px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;

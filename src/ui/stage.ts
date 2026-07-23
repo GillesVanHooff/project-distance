@@ -1,4 +1,4 @@
-import { CLICK_RATE_CAP, GOLDEN_BOOST_DURATION_SEC } from '../core/constants';
+import { C_PLANCK_PER_SEC, CLICK_RATE_CAP, GOLDEN_BOOST_DURATION_SEC } from '../core/constants';
 import { PERCENT_C_UNLOCK } from '../core/content';
 import { distanceRate, generatorSpeed, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
@@ -13,6 +13,20 @@ import {
 } from '../core/units';
 import type { UiRefs } from './dom';
 
+/** Exact OoM span from 1 ℓₚ/s to c, in raw log10(ℓₚ/s) — replaces the earlier
+ * hardcoded "43" (c is actually ~43.27 OoM up) so the bar hits 100% exactly at c. */
+const LOG_C_PLANCK_PER_SEC = Math.log10(C_PLANCK_PER_SEC.toNumber());
+
+/** Exponent applied to the raw log-normalized speed before mapping to 0..1.
+ * A plain linear-in-log mapping front-loads the bar: a Planck length is so tiny
+ * that any humanly-noticeable speed (1 mm/s is already ~32 of the 43 orders of
+ * magnitude up from 1 ℓₚ/s) reads as most of the way to lightspeed within the
+ * first few minutes of play. Raising the normalized value to this power pushes
+ * that early/mid stretch down (1 mm/s ≈ 23%, 1 km/s ≈ 49%) and reserves the
+ * bar's last stretch for the actual approach to c, so the "wall" grind still
+ * reads as a payoff climb rather than the bar already looking nearly full. */
+const SPEED_CURVE_EXPONENT = 6;
+
 /** Log-mapped 0..1 visual intensity for the canvas scene — not literal % of c, so
  * ambient motion stays readable across all 43 orders of magnitude the real speed spans.
  * Below 1 ℓₚ/s reads as stopped: the speed stat's own display floors to "0" below that
@@ -20,8 +34,9 @@ import type { UiRefs } from './dom';
  * mid-decay — would otherwise show a moving trail next to a "0" readout. */
 export function visualSpeedFraction(rawSpeedPlanckPerSec: number): number {
   if (rawSpeedPlanckPerSec < 1) return 0;
-  const norm = Math.max(0, Math.min(1, Math.log10(rawSpeedPlanckPerSec) / 43));
-  return 0.08 + norm * 0.92;
+  const norm = Math.max(0, Math.min(1, Math.log10(rawSpeedPlanckPerSec) / LOG_C_PLANCK_PER_SEC));
+  const shaped = norm ** SPEED_CURVE_EXPONENT;
+  return 0.08 + shaped * 0.92;
 }
 
 /** Live numbers for the scene's scale ruler — same unit the odometer is showing,
