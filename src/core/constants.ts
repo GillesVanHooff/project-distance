@@ -9,6 +9,13 @@ export const C_METERS_PER_SEC = 299_792_458;
 /** Speed of light in ℓₚ/s — the hard speed cap and the prestige trigger. */
 export const C_PLANCK_PER_SEC = D(C_METERS_PER_SEC / PLANCK_METERS); // ≈ 1.855e43
 
+/** Speed gate past which speed is displayed as % of c (information unlock) —
+ * 0.01% of c, ~30 km/s. A speed gate rather than a distance gate: the player
+ * can be crawling well past 1 AU while still far below this, or blow past it
+ * before 1 AU on a strong click streak, and either way the readout should
+ * track "is this speed worth showing as a fraction of light speed" directly. */
+export const PERCENT_C_SPEED_UNLOCK = C_PLANCK_PER_SEC.mul(0.0001);
+
 export const METERS_PER_KM = 1e3;
 export const METERS_PER_AU = 1.495978707e11;
 export const METERS_PER_LIGHT_DAY = C_METERS_PER_SEC * 86_400;

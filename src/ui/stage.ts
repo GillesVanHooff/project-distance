@@ -4,8 +4,8 @@ import {
   GOLDEN_BOOST_DURATION_SEC,
   GOLDEN_BOOST_MULTIPLIER,
   GOLDEN_SPEED_BOOST_PCT,
+  PERCENT_C_SPEED_UNLOCK,
 } from '../core/constants';
-import { PERCENT_C_UNLOCK } from '../core/content';
 import { distanceRate, generatorSpeed, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
 import type { GameState } from '../core/state';
@@ -80,7 +80,7 @@ export function updateStage(state: GameState, refs: UiRefs): StageFrame {
   const spd = speed(state);
   refs.speedValue.innerHTML = formatSpeed(spd, true);
 
-  const percentUnlocked = state.currencies.distanceRun.gte(PERCENT_C_UNLOCK);
+  const percentUnlocked = spd.gte(PERCENT_C_SPEED_UNLOCK);
   refs.percentCWrap.classList.toggle('is-hidden', !percentUnlocked);
   if (percentUnlocked) {
     refs.percentCValue.innerHTML = formatPercentOfC(spd, true);

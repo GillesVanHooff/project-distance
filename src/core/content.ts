@@ -238,9 +238,6 @@ export const UPGRADES_BY_ID: ReadonlyMap<string, UpgradeDef> = new Map(
   UPGRADES.map((u) => [u.id, u]),
 );
 
-/** Distance gate past which speed is displayed as % of c (information unlock). */
-export const PERCENT_C_UNLOCK = metersToPlanck(1.495978707e11); // 1 AU
-
 /** Distance gate for buy-10 / buy-max controls. */
 export const BULK_BUY_UNLOCK = metersToPlanck(1e-10);
 

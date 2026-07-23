@@ -33,11 +33,11 @@
 import { D, type Decimal } from '../src/core/decimal';
 import {
   C_PLANCK_PER_SEC,
+  PERCENT_C_SPEED_UNLOCK,
   PLANCK_METERS,
 } from '../src/core/constants';
 import {
   GENERATORS,
-  PERCENT_C_UNLOCK,
   PHOTON_TIERS,
   SHOP_UNLOCK,
   UPGRADES,
@@ -178,7 +178,7 @@ function main(): void {
         `  · Photon Conversion ${t}/${PHOTON_TIERS} bought (${pctC()})`,
       );
     }
-    gate('pctc', dist.gte(PERCENT_C_UNLOCK), `% of c display unlocks — 1 AU (${pctC()})`);
+    gate('pctc', rawSpeed(state).gte(PERCENT_C_SPEED_UNLOCK), `% of c display unlocks — 0.01% of c (${pctC()})`);
     gate('c', canPrestige(state), '★ SPEED = c — PRESTIGE AVAILABLE');
 
     const ms = milestonesReached(dist);
