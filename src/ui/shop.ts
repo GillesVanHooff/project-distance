@@ -31,6 +31,102 @@ export function renderShop(state: GameState, refs: UiRefs, tab: ShopTab): void {
   } else {
     refs.shopList.innerHTML = renderUpgradeList(state, (u) => u.category === 'photon');
   }
+
+  updateTabIndicators(state, refs);
+}
+
+// Live affordability of the very next purchase for each item in a tab —
+// what actually drives the dot's steady visibility (can the player buy
+// *something* right now).
+function tabItemAvailability(state: GameState, tab: ShopTab): Map<string, boolean> {
+  const result = new Map<string, boolean>();
+
+  if (tab === 'generators') {
+    GENERATORS.forEach((_, i) => {
+      result.set(`generator:${i}`, generatorUnlocked(state, i) && state.currencies.energy.gte(generatorCost(state, i)));
+    });
+    return result;
+  }
+
+  const filter = tab === 'upgrades' ? (u: (typeof UPGRADES)[number]) => u.category !== 'photon' : (u: (typeof UPGRADES)[number]) => u.category === 'photon';
+  for (const def of UPGRADES.filter(filter)) {
+    const cost = upgradeNextCost(state, def.id);
+    const available =
+      upgradeUnlocked(state, def.id) &&
+      upgradeLevel(state, def.id) < def.maxLevel &&
+      cost !== undefined &&
+      state.currencies.energy.gte(cost);
+    result.set(`upgrade:${def.id}`, available);
+  }
+  return result;
+}
+
+// Every upgrade level's raw cost in a tab, checked independently of what the
+// player has actually bought — e.g. Thruster Calibration is 15/150/1,500/...
+// per level (content.ts), so this fires again the moment energy passes 150
+// even if level 1 (cost 15) was never purchased. That's deliberate: the shop
+// only ever displays the *next real* cost, so blowing past a deeper level's
+// cost while still sitting on level 0 is invisible in the UI otherwise.
+// Generators are excluded: their ~1.10×-per-unit cost growth (CLAUDE.md)
+// would make a rung fire every few seconds of idle clicking.
+function tabMilestoneAvailability(state: GameState, tab: ShopTab): Map<string, boolean> {
+  const result = new Map<string, boolean>();
+  if (tab === 'generators') return result;
+
+  const filter = tab === 'upgrades' ? (u: (typeof UPGRADES)[number]) => u.category !== 'photon' : (u: (typeof UPGRADES)[number]) => u.category === 'photon';
+  for (const def of UPGRADES.filter(filter)) {
+    if (!upgradeUnlocked(state, def.id)) continue;
+    for (let level = 1; level <= def.maxLevel; level++) {
+      result.set(`upgrade:${def.id}:${level}`, state.currencies.energy.gte(def.cost(level)));
+    }
+  }
+  return result;
+}
+
+// Tracks, per item/level, whether it was affordable as of the last render —
+// module-level since there's only ever one game/DOM instance per page. Used
+// to fire the spark burst only on the rising edge (something *newly*
+// crossing its cost — e.g. saving up for level 2 without ever buying level 1
+// still fires it again), not on every 250ms refresh tick or for
+// thresholds already crossed.
+const previousItemAvailability = new Map<string, boolean>();
+
+function updateTabIndicators(state: GameState, refs: UiRefs): void {
+  for (const btn of refs.shopTabs) {
+    const tabId = btn.dataset['tab'] as ShopTab | undefined;
+    const indicator = btn.querySelector<HTMLElement>('[data-indicator]');
+    const dot = btn.querySelector<HTMLElement>('[data-dot]');
+    if (!tabId || !indicator || !dot) continue;
+
+    const items = tabItemAvailability(state, tabId);
+    let anyAvailable = false;
+    for (const available of items.values()) {
+      if (available) anyAvailable = true;
+    }
+
+    // Generators have no separate milestone ladder (see above), so fall
+    // back to their live affordability keys for burst edge-detection too.
+    const milestones = tabMilestoneAvailability(state, tabId);
+    const burstKeys = tabId === 'generators' ? items : milestones;
+
+    let newlyAvailable = false;
+    for (const [key, available] of burstKeys) {
+      if (available && !previousItemAvailability.get(key)) newlyAvailable = true;
+      previousItemAvailability.set(key, available);
+    }
+
+    // Always visible while something's buyable — not just when the player
+    // is looking at a different tab.
+    dot.classList.toggle('is-visible', anyAvailable);
+
+    if (newlyAvailable) {
+      // Restart the CSS animation even if a previous burst's classList never
+      // got cleared: force a reflow between remove and re-add.
+      indicator.classList.remove('is-bursting');
+      void indicator.offsetWidth;
+      indicator.classList.add('is-bursting');
+    }
+  }
 }
 
 function lockedRow(unlock: Decimal): string {

@@ -12,6 +12,7 @@
 }
 
 .shop__tab {
+  position: relative;
   padding: 8px 14px;
   border-radius: $radius-control $radius-control 0 0;
   color: $text-dim;
@@ -189,5 +190,150 @@
 
   &:disabled {
     cursor: default;
+  }
+}
+
+// New-purchase-available indicator, shown on an inactive shop tab when it
+// contains at least one unlocked, affordable, not-maxed item — so the player
+// notices without having to click through every tab. The moment something
+// newly becomes available it fires a one-shot burst — a expanding ring plus
+// sparks flung outward, big enough to sweep across the tab (echoes the
+// click-to-accelerate sparks in the particle scene) — then settles into the
+// original small steady pulsing dot for as long as the offer stands.
+.shop__tab-indicator {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  pointer-events: none;
+}
+
+.shop__tab-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: $accent-blue-light;
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+
+  &.is-visible {
+    opacity: 1;
+    transform: scale(1);
+    animation: shop-tab-dot-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes shop-tab-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 141, 255, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(76, 141, 255, 0);
+  }
+}
+
+// Shockwave ring — scales from the dot's own size up to ~9x (roughly the
+// width of a tab) so the pop visibly sweeps across the tab, not just around
+// the tiny badge.
+.shop__tab-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid $accent-blue-light;
+  opacity: 0;
+}
+
+.shop__tab-indicator.is-bursting .shop__tab-ring {
+  animation: shop-tab-ring-pop 0.6s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+}
+
+@keyframes shop-tab-ring-pop {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(9);
+  }
+}
+
+.shop__tab-spark {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: $accent-blue-light;
+  box-shadow: 0 0 5px 1px rgba(143, 181, 255, 0.9);
+  opacity: 0;
+
+  // Eight sparks fanned 45° apart — rotate() sets the launch direction, then
+  // translate() moves along it (in the rotated coordinate space), so each
+  // spark flies outward from the dot in a full radial burst. nth-of-type
+  // counts all <span> siblings in the indicator (dot, ring, then 8 sparks),
+  // so these start at 3.
+  &:nth-of-type(3) {
+    --angle: 0deg;
+  }
+  &:nth-of-type(4) {
+    --angle: 45deg;
+    animation-delay: 0.015s;
+  }
+  &:nth-of-type(5) {
+    --angle: 90deg;
+  }
+  &:nth-of-type(6) {
+    --angle: 135deg;
+    animation-delay: 0.03s;
+  }
+  &:nth-of-type(7) {
+    --angle: 180deg;
+  }
+  &:nth-of-type(8) {
+    --angle: 225deg;
+    animation-delay: 0.02s;
+  }
+  &:nth-of-type(9) {
+    --angle: 270deg;
+  }
+  &:nth-of-type(10) {
+    --angle: 315deg;
+    animation-delay: 0.01s;
+  }
+}
+
+.shop__tab-indicator.is-bursting .shop__tab-spark {
+  animation-name: shop-tab-spark-burst;
+  animation-duration: 0.55s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes shop-tab-spark-burst {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translate(0, 0) scale(1.4);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translate(26px, 0) scale(0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop__tab-dot.is-visible {
+    animation: none;
+  }
+
+  .shop__tab-indicator.is-bursting .shop__tab-ring,
+  .shop__tab-indicator.is-bursting .shop__tab-spark {
+    animation: none;
   }
 }
