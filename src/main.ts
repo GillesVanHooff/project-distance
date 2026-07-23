@@ -18,10 +18,11 @@ import {
   debugForcePrestige,
   debugSkipToNextMilestone,
 } from './core/debug';
+import { GENERATORS } from './core/content';
 import { MILESTONES, milestonesReached } from './core/milestones';
 import { applyOfflineProgress, deserialize, serialize } from './core/save';
 import { newGame, type GameState } from './core/state';
-import { formatDistanceStr } from './core/units';
+import { formatDistanceStr, formatNumber } from './core/units';
 import { queryRefs } from './ui/dom';
 import { hideOfflineOverlay, showOfflineOverlay } from './ui/offline';
 import { initialRecentLog, updateProgress } from './ui/progress';
@@ -114,7 +115,12 @@ function main(): void {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
     if (!btn || btn.disabled) return;
     if (btn.dataset['action'] === 'buy-generator') {
-      buyGenerator(state, Number(btn.dataset['index']), 1);
+      const index = Number(btn.dataset['index']);
+      const result = buyGenerator(state, index, 1);
+      if (result.newDoublingCount !== undefined) {
+        const multiplier = D(2).pow(result.newDoublingCount);
+        scene.addGeneratorDoublingEffect(`${GENERATORS[index]!.name} ×${formatNumber(multiplier)}!`);
+      }
     } else if (btn.dataset['action'] === 'buy-upgrade') {
       const id = btn.dataset['id'];
       if (id) buyUpgrade(state, id);

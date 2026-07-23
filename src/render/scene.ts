@@ -39,6 +39,13 @@ interface FloatingText {
   y: number;
   text: string;
   age: number;
+  /** Overrides FLOAT_TEXT_LIFETIME_SEC for labels that need to stay up longer
+   * than the terse "+distance" click popup (e.g. a generator-doubling name) —
+   * defaults to FLOAT_TEXT_LIFETIME_SEC when unset. */
+  life?: number;
+  /** Bigger, glowing variant for the generator-doubling label — everything
+   * else about a floating text's behavior/lifetime is identical. */
+  big?: boolean;
 }
 
 interface Ripple {
@@ -46,6 +53,10 @@ interface Ripple {
   /** Particle radius at the moment this ripple spawned — it grows outward
    * from here so it starts right at the particle's border, not its center. */
   startRadius: number;
+  /** Thicker, brighter, farther-reaching variant used for generator-doubling
+   * shockwaves (see addGeneratorDoublingEffect) — everything else about a
+   * ripple's behavior/lifetime is identical. */
+  bold?: boolean;
 }
 
 /** A single spark flung out by a click — the "burst" half of the click
@@ -341,6 +352,12 @@ export class ParticleScene {
   // ripple's growth curve so the two visually agree.
   private pulse = 0;
 
+  // Generator-doubling flash (see addGeneratorDoublingEffect/drawDoublingFlash):
+  // snaps to 1 and decays much slower than pulse so a bright white-hot halo
+  // washes out from the particle over roughly a second, distinct from (and on
+  // top of) the ordinary click punch.
+  private doublingFlash = 0;
+
   // visualSpeed level (see visualSpeedFraction in ui/stage.ts) past which the
   // dust field starts turning into light-speed streaks — chosen so the effect
   // is a payoff for the final stretch toward c, not something that gradually
@@ -485,6 +502,46 @@ export class ParticleScene {
         age: 0,
         life: 0.45 + Math.random() * 0.5,
         size: 0.8 + Math.random() * 1.6,
+      });
+    }
+  }
+
+  /** Celebration for crossing a ×N production-doubling threshold (every
+   * GENERATOR_DOUBLE_EVERY owned of a generator — see core/logic.ts's
+   * buyGenerator/rawSpeed): a bigger, longer-held sibling of addClickEffect —
+   * a wider double-ring shockwave and a denser spark burst than a normal
+   * click, plus label text held up long enough to actually read a generator
+   * name + multiplier rather than the terse "+distance" click popup. Anchored
+   * to the particle for the same reason as addClickEffect: it should read as
+   * the particle reacting, not debris spawning at the shop button. */
+  addGeneratorDoublingEffect(label: string): void {
+    const x = this.particleVisualX;
+    const y = this.particleY - this.particleRadius() - 16;
+    this.floating.push({ x, y, text: label, age: 0, life: 1.6, big: true });
+    this.pulse = Math.max(this.pulse, 1.8);
+    this.doublingFlash = 1;
+
+    const centerX = this.particleVisualX;
+    const centerY = this.particleY;
+    const edge = this.particleRadius();
+    // Three bold concentric rings instead of addClickEffect's one faint ring,
+    // so the shockwave reads as a real detonation rather than a bigger click.
+    this.ripples.push({ age: 0, startRadius: edge, bold: true });
+    this.ripples.push({ age: 0, startRadius: edge + 16, bold: true });
+    this.ripples.push({ age: 0, startRadius: edge + 32, bold: true });
+
+    const count = 40;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 160 + Math.random() * 480;
+      this.sparks.push({
+        x: centerX + Math.cos(angle) * edge,
+        y: centerY + Math.sin(angle) * edge,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        age: 0,
+        life: 0.6 + Math.random() * 0.75,
+        size: 1.5 + Math.random() * 2.8,
       });
     }
   }
@@ -768,9 +825,14 @@ export class ParticleScene {
     // Exponential decay — most of the punch is gone within ~250ms, reading
     // as a snappy bounce rather than a lingering pulse.
     this.pulse *= Math.exp(-dt * 11);
+    // Much slower decay than pulse — the doubling flash washes out over
+    // roughly a second instead of a couple hundred milliseconds.
+    this.doublingFlash *= Math.exp(-dt * 4.5);
 
     for (const f of this.floating) f.age += dt;
-    this.floating = this.floating.filter((f) => f.age < ParticleScene.FLOAT_TEXT_LIFETIME_SEC);
+    this.floating = this.floating.filter(
+      (f) => f.age < (f.life ?? ParticleScene.FLOAT_TEXT_LIFETIME_SEC),
+    );
     for (const r of this.ripples) r.age += dt;
     this.ripples = this.ripples.filter((r) => r.age < 0.6);
 
@@ -805,6 +867,7 @@ export class ParticleScene {
     this.drawGolden();
     this.drawRuler(PARTICLE_PALETTE);
     this.drawBoostAura();
+    this.drawDoublingFlash(PARTICLE_PALETTE);
     this.drawParticle(PARTICLE_PALETTE);
     this.drawSparks(PARTICLE_PALETTE);
     this.drawRipples(PARTICLE_PALETTE);
@@ -1151,6 +1214,30 @@ export class ParticleScene {
     ctx.globalAlpha = 1;
   }
 
+  /** White-hot halo that blooms out from the particle and fades over ~1s —
+   * the "detonation flash" half of the generator-doubling celebration (see
+   * addGeneratorDoublingEffect), on top of the bold ripple rings and spark
+   * burst. Drawn just under the particle so the particle itself pops out of
+   * the middle of the flash rather than being washed out by it. */
+  private drawDoublingFlash(p: EraPalette): void {
+    if (this.doublingFlash < 0.02) return;
+    const { ctx } = this;
+    const cx = this.particleVisualX;
+    const cy = this.particleY;
+    const spread = 1 - this.doublingFlash;
+    const r = this.particleRadius() + spread * 110;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.35, p.glow);
+    grad.addColorStop(1, 'transparent');
+    ctx.globalAlpha = this.doublingFlash * 0.65;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   private drawParticle(p: EraPalette): void {
     const { ctx } = this;
     const px = this.particleVisualX;
@@ -1233,12 +1320,17 @@ export class ParticleScene {
     const y = this.particleY;
     for (const rp of this.ripples) {
       const t = rp.age / 0.6;
-      ctx.globalAlpha = (1 - t) * 0.45;
+      ctx.globalAlpha = (1 - t) * (rp.bold ? 0.7 : 0.45);
       ctx.strokeStyle = p.particleMid;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = rp.bold ? 3 : 1;
+      if (rp.bold) {
+        ctx.shadowColor = p.glow;
+        ctx.shadowBlur = 16;
+      }
       ctx.beginPath();
-      ctx.arc(x, y, rp.startRadius + t * 26, 0, Math.PI * 2);
+      ctx.arc(x, y, rp.startRadius + t * (rp.bold ? 46 : 26), 0, Math.PI * 2);
       ctx.stroke();
+      ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
   }
@@ -1251,29 +1343,42 @@ export class ParticleScene {
   private static readonly FLOAT_TEXT_BASE_PX = 18;
   private static readonly FLOAT_TEXT_SUP_PX = Math.round(ParticleScene.FLOAT_TEXT_BASE_PX * 0.62);
 
+  // Generator-doubling labels render at this multiple of the normal click-popup
+  // size, with a matching glow, so "Generator Name ×N!" reads as a standout
+  // event rather than just a longer-lived version of the click text.
+  private static readonly FLOAT_TEXT_BIG_SCALE = 1.5;
+
   private drawFloatingText(p: EraPalette): void {
     const { ctx } = this;
     const { FLOAT_TEXT_BASE_PX: baseFont, FLOAT_TEXT_SUP_PX: supFont } = ParticleScene;
-    const supRise = supFont * 0.5;
     ctx.textAlign = 'left';
     for (const f of this.floating) {
-      const t = f.age / ParticleScene.FLOAT_TEXT_LIFETIME_SEC;
+      const scale = f.big ? ParticleScene.FLOAT_TEXT_BIG_SCALE : 1;
+      const fontPx = baseFont * scale;
+      const supPx = supFont * scale;
+      const supRise = supPx * 0.5;
+      const t = f.age / (f.life ?? ParticleScene.FLOAT_TEXT_LIFETIME_SEC);
       ctx.globalAlpha = Math.max(0, 1 - t);
       ctx.fillStyle = p.particleCore;
+      if (f.big) {
+        ctx.shadowColor = p.glow;
+        ctx.shadowBlur = 18;
+      }
       const y = f.y - t * 30;
       const segments = splitSuperscript(f.text);
 
       let width = 0;
       for (const seg of segments) {
-        ctx.font = `700 ${seg.sup ? supFont : baseFont}px "IBM Plex Mono", monospace`;
+        ctx.font = `700 ${seg.sup ? supPx : fontPx}px "IBM Plex Mono", monospace`;
         width += ctx.measureText(seg.text).width;
       }
       let x = f.x - width / 2;
       for (const seg of segments) {
-        ctx.font = `700 ${seg.sup ? supFont : baseFont}px "IBM Plex Mono", monospace`;
+        ctx.font = `700 ${seg.sup ? supPx : fontPx}px "IBM Plex Mono", monospace`;
         ctx.fillText(seg.text, x, seg.sup ? y - supRise : y);
         x += ctx.measureText(seg.text).width;
       }
+      ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = 'center';

@@ -280,14 +280,33 @@ export function generatorMaxAffordable(state: GameState, index: number): number 
   return Math.max(0, Math.floor(n));
 }
 
-export function buyGenerator(state: GameState, index: number, count: number): number {
-  if (!generatorUnlocked(state, index) || count <= 0) return 0;
+export interface GeneratorPurchaseResult {
+  bought: number;
+  /** Set to the generator's new total doubling count (e.g. 2 means output is
+   * now ×4, see GENERATOR_DOUBLE_EVERY/rawSpeed) if this purchase crossed one
+   * or more doubling thresholds — undefined otherwise. A bulk buy can cross
+   * several at once (e.g. buy-max jumping from 20 owned to 80 owned crosses
+   * both the 25 and 50 and 75 thresholds); callers only need to know the
+   * final multiplier reached, so this is the after-count's doublings, not a
+   * list of every one crossed. */
+  newDoublingCount?: number;
+}
+
+export function buyGenerator(state: GameState, index: number, count: number): GeneratorPurchaseResult {
+  if (!generatorUnlocked(state, index) || count <= 0) return { bought: 0 };
   const affordable = Math.min(count, generatorMaxAffordable(state, index));
-  if (affordable <= 0) return 0;
+  if (affordable <= 0) return { bought: 0 };
   const total = generatorBulkCost(state, index, affordable);
+  const before = state.generators[index] ?? 0;
+  const after = before + affordable;
   state.currencies.energy = state.currencies.energy.sub(total).max(ZERO);
-  state.generators[index] = (state.generators[index] ?? 0) + affordable;
-  return affordable;
+  state.generators[index] = after;
+  const beforeDoublings = Math.floor(before / GENERATOR_DOUBLE_EVERY);
+  const afterDoublings = Math.floor(after / GENERATOR_DOUBLE_EVERY);
+  return {
+    bought: affordable,
+    newDoublingCount: afterDoublings > beforeDoublings ? afterDoublings : undefined,
+  };
 }
 
 export function upgradeUnlocked(state: GameState, id: string): boolean {
