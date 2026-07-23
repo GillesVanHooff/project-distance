@@ -1091,13 +1091,18 @@ export class ParticleScene {
 
     // "You are here" cursor — pinned to the particle's x position, independent
     // of the tick grid, so it never jumps when the grid's step size reflows.
-    ctx.fillStyle = p.particleMid;
-    ctx.shadowColor = p.glow;
+    // Follows only the deliberate mouse-follow offset (followX * followBlend),
+    // not idle bob/wobble — same reasoning as particleX excluding bobX above,
+    // it just no longer excludes the part of bobX that's real cursor-driven motion.
+    const cursorX = this.particleX + this.followX * this.followBlend;
+    const golden = this.goldenBoostFraction > 0;
+    ctx.fillStyle = golden ? GOLD_PALETTE.mid : p.particleMid;
+    ctx.shadowColor = golden ? GOLD_PALETTE.glow : p.glow;
     ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.moveTo(this.particleX, rulerY + 10);
-    ctx.lineTo(this.particleX - 4, rulerY + 18);
-    ctx.lineTo(this.particleX + 4, rulerY + 18);
+    ctx.moveTo(cursorX, rulerY + 10);
+    ctx.lineTo(cursorX - 4, rulerY + 18);
+    ctx.lineTo(cursorX + 4, rulerY + 18);
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
