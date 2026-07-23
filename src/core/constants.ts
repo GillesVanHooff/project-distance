@@ -73,10 +73,16 @@ export const BURST_DURATION_SEC = 10;
 export const BURST_COOLDOWN_SEC = 90;
 
 /** Golden particle catch payoff (see render/scene.ts's GoldenParticle): a
- * short, very powerful click multiplier — no cooldown of its own since the
- * golden particle's own random spawn timer is the rate limiter. Stacks
- * multiplicatively with burst if both happen to be active at once. */
+ * short, powerful buff picked at random from GOLDEN_EFFECT_IDS (core/logic.ts)
+ * — no cooldown of its own since the golden particle's own random spawn timer
+ * is the rate limiter. Catching the same effect again while it's active adds
+ * another stack (two click-boost catches = ×40, not just a refreshed ×20);
+ * catching a different effect runs it in parallel on its own timer. The click
+ * boost stacks multiplicatively with burst if both happen to be active. The
+ * speed boost is folded into rawSpeed() so it's automatically subject to the
+ * same c cap as every other speed source — it can never push past light speed. */
 export const GOLDEN_BOOST_MULTIPLIER = 20;
+export const GOLDEN_SPEED_BOOST_PCT = 0.20;
 export const GOLDEN_BOOST_DURATION_SEC = 30;
 
 /** Time machine (prestige shop): each level doubles time compression. Cost = 3^level crystals. */

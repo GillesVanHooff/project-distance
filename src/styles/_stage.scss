@@ -175,20 +175,22 @@
   transition: width 0.2s ease-out;
 }
 
-// Golden click-boost banner (see main.ts's activateGoldenBoost wiring):
-// visible only while the boost is active, pinned just below the speed row —
-// the ongoing "you are currently supercharged" readout, separate from the
-// scene's own gold aura/spark effect on the particle itself.
+// Golden-catch effect banner (see main.ts's activateRandomGoldenEffect
+// wiring): a single box pinned just under the speed bar, holding one row per
+// active effect (click boost, speed boost — see GOLDEN_EFFECT_IDS) so either
+// or both can show at once without two separate floating boxes — the ongoing
+// "you are currently supercharged" readout, separate from the scene's own
+// gold aura/spark effect on the particle itself.
 .stage__boost {
   position: absolute;
   left: 50%;
-  top: 48px;
+  top: 38px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 6px 16px;
+  gap: 8px;
+  padding: 8px 16px;
   background: rgba(20, 15, 5, 0.6);
   border: 1px solid rgba(255, 210, 76, 0.4);
   border-radius: $radius-control;
@@ -198,6 +200,19 @@
 
   &.is-hidden {
     opacity: 0;
+  }
+}
+
+.stage__boost-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+
+  // display:none (not opacity) so a single inactive row doesn't leave a gap
+  // inside the box when the other effect is active alone.
+  &.is-hidden {
+    display: none;
   }
 }
 

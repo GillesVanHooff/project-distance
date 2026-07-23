@@ -20,6 +20,15 @@ export const CURRENCIES: CurrencyDef[] = [
   { id: 'crystals', name: 'Time Crystals', resetsOnPrestige: false },
 ];
 
+/** Golden-catch effect pool (see GOLDEN_EFFECT_IDS in core/logic.ts). */
+export type GoldenEffectId = 'click' | 'speed';
+
+export interface GoldenEffectState {
+  /** How many times this effect has stacked since its timer was last at 0. */
+  stacks: number;
+  secRemaining: number;
+}
+
 export interface GameState {
   currencies: Record<CurrencyId, Decimal>;
   /** Lifetime-earned crystals — drives the passive speed bonus (spending doesn't reduce it). */
@@ -36,8 +45,10 @@ export interface GameState {
   /** Burst ability timers (seconds remaining). */
   burstActiveSec: number;
   burstCooldownSec: number;
-  /** Golden-catch click boost (seconds remaining) — like the burst timers, transient and not persisted. */
-  goldenBoostActiveSec: number;
+  /** Golden-catch effects (click boost, speed boost) — like the burst timers,
+   * transient and not persisted. Same effect stacks additively on repeat
+   * catches; different effects run in parallel with independent timers. */
+  goldenEffects: Record<GoldenEffectId, GoldenEffectState>;
   /** Token bucket for click diminishing returns. */
   clickBucket: number;
   /** Live clicks/sec rate meter (leaky bucket: +CLICK_RATE_IMPULSE per click, exponential decay per tick). */
@@ -61,7 +72,10 @@ export function newGame(): GameState {
     runTimeSec: 0,
     burstActiveSec: 0,
     burstCooldownSec: 0,
-    goldenBoostActiveSec: 0,
+    goldenEffects: {
+      click: { stacks: 0, secRemaining: 0 },
+      speed: { stacks: 0, secRemaining: 0 },
+    },
     clickBucket: 5,
     clickRate: 0,
   };

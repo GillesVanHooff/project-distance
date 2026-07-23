@@ -15,6 +15,7 @@ import {
   GENERATOR_DOUBLE_EVERY,
   GOLDEN_BOOST_DURATION_SEC,
   GOLDEN_BOOST_MULTIPLIER,
+  GOLDEN_SPEED_BOOST_PCT,
   TIME_MACHINE_BASE_COST,
   TIME_MACHINE_COMPRESSION,
   TIME_MACHINE_COST_GROWTH,
@@ -30,7 +31,11 @@ import {
   MULTIPLIER_COUNT,
 } from './content';
 import { milestonesReached } from './milestones';
-import { upgradeLevel, type GameState } from './state';
+import { upgradeLevel, type GameState, type GoldenEffectId } from './state';
+
+/** Golden-catch effect pool (see activateRandomGoldenEffect) — extend this
+ * list to add new golden effects. */
+export const GOLDEN_EFFECT_IDS: GoldenEffectId[] = ['click', 'speed'];
 
 // ---------------------------------------------------------------------------
 // Production
@@ -55,6 +60,15 @@ export function globalMultiplier(state: GameState): Decimal {
   return mult;
 }
 
+/** Multiplier from an active golden speed-boost effect (see GOLDEN_EFFECT_IDS)
+ * — folded straight into rawSpeed() so it flows through the same c cap
+ * (generatorSpeed()/speed()) as every other speed source, never past it. */
+export function goldenSpeedMultiplier(state: GameState): Decimal {
+  const eff = state.goldenEffects.speed;
+  if (eff.secRemaining <= 0) return ONE;
+  return ONE.add(D(GOLDEN_SPEED_BOOST_PCT * eff.stacks));
+}
+
 /** Raw generator production in ℓₚ/s, before the c cap. */
 export function rawSpeed(state: GameState): Decimal {
   let prod = ZERO;
@@ -66,7 +80,7 @@ export function rawSpeed(state: GameState): Decimal {
       GENERATORS[i]!.baseProd.mul(count).mul(D(2).pow(doublings)),
     );
   }
-  return prod.mul(globalMultiplier(state));
+  return prod.mul(globalMultiplier(state)).mul(goldenSpeedMultiplier(state));
 }
 
 /** Generator-only speed, capped at c — the basis for the prestige gate,
@@ -155,10 +169,16 @@ export function activateBurst(state: GameState): boolean {
 }
 
 /** Golden particle catch payoff (see render/scene.ts's consumeGoldenCatch) —
- * refreshes to the full duration rather than stacking additively, so an
- * unlikely back-to-back catch extends the window instead of compounding it. */
-export function activateGoldenBoost(state: GameState): void {
-  state.goldenBoostActiveSec = GOLDEN_BOOST_DURATION_SEC;
+ * picks a random effect from GOLDEN_EFFECT_IDS. Catching the same effect
+ * again while it's active adds a stack and refreshes its timer to the full
+ * duration; catching a different effect starts its own independent timer
+ * rather than interrupting the first. */
+export function activateRandomGoldenEffect(state: GameState): GoldenEffectId {
+  const id = GOLDEN_EFFECT_IDS[Math.floor(Math.random() * GOLDEN_EFFECT_IDS.length)]!;
+  const eff = state.goldenEffects[id];
+  eff.stacks = eff.secRemaining > 0 ? eff.stacks + 1 : 1;
+  eff.secRemaining = GOLDEN_BOOST_DURATION_SEC;
+  return id;
 }
 
 /**
@@ -174,7 +194,8 @@ export function click(state: GameState): Decimal {
   }
   let value = clickValue(state).mul(factor);
   if (state.burstActiveSec > 0) value = value.mul(BURST_MULTIPLIER);
-  if (state.goldenBoostActiveSec > 0) value = value.mul(GOLDEN_BOOST_MULTIPLIER);
+  const clickBoost = state.goldenEffects.click;
+  if (clickBoost.secRemaining > 0) value = value.mul(GOLDEN_BOOST_MULTIPLIER * clickBoost.stacks);
   gainDistance(state, value);
   state.totalClicks += 1;
   state.clickRate += CLICK_RATE_IMPULSE;
@@ -200,8 +221,12 @@ export function tick(state: GameState, dt: number): void {
   else if (state.burstCooldownSec > 0) {
     state.burstCooldownSec = Math.max(0, state.burstCooldownSec - dt);
   }
-  if (state.goldenBoostActiveSec > 0) {
-    state.goldenBoostActiveSec = Math.max(0, state.goldenBoostActiveSec - dt);
+  for (const id of GOLDEN_EFFECT_IDS) {
+    const eff = state.goldenEffects[id];
+    if (eff.secRemaining > 0) {
+      eff.secRemaining = Math.max(0, eff.secRemaining - dt);
+      if (eff.secRemaining === 0) eff.stacks = 0;
+    }
   }
   state.clickBucket = Math.min(CLICK_RATE_CAP, state.clickBucket + CLICK_RATE_CAP * dt);
   state.clickRate *= Math.exp(-CLICK_RATE_DECAY * dt);
@@ -327,7 +352,7 @@ export function prestige(state: GameState): Decimal {
   state.runTimeSec = 0;
   state.burstActiveSec = 0;
   state.burstCooldownSec = 0;
-  state.goldenBoostActiveSec = 0;
+  for (const id of GOLDEN_EFFECT_IDS) state.goldenEffects[id] = { stacks: 0, secRemaining: 0 };
   return gain;
 }
 

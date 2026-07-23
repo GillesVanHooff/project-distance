@@ -1,9 +1,9 @@
 import './styles/main.scss';
 
-import { GOLDEN_BOOST_MULTIPLIER, TICK_RATE } from './core/constants';
+import { TICK_RATE } from './core/constants';
 import { D, type Decimal } from './core/decimal';
 import {
-  activateGoldenBoost,
+  activateRandomGoldenEffect,
   buyGenerator,
   buyUpgrade,
   canPrestige,
@@ -61,7 +61,6 @@ function main(): void {
   const refs = queryRefs();
   const { state, offlineGain, offlineElapsedSec } = loadOrCreateState();
   const scene = new ParticleScene(refs.sceneCanvas);
-  refs.boostMultValue.textContent = `×${GOLDEN_BOOST_MULTIPLIER}`;
 
   // Blocks shop/prestige/scene interaction until the offline-progress
   // overlay (if shown) is dismissed via its "Okay" button.
@@ -225,7 +224,7 @@ function main(): void {
     const { visualFraction, clickIntensity, ruler, goldenBoostFraction } = updateStage(state, refs);
     scene.setEra(ruler.symbol);
     scene.update(dt, visualFraction, clickIntensity, ruler, goldenBoostFraction);
-    if (!inputLocked && scene.consumeGoldenCatch()) activateGoldenBoost(state);
+    if (!inputLocked && scene.consumeGoldenCatch()) activateRandomGoldenEffect(state);
     scene.draw();
 
     requestAnimationFrame(frame);

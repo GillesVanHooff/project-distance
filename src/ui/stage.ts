@@ -1,4 +1,10 @@
-import { C_PLANCK_PER_SEC, CLICK_RATE_CAP, GOLDEN_BOOST_DURATION_SEC } from '../core/constants';
+import {
+  C_PLANCK_PER_SEC,
+  CLICK_RATE_CAP,
+  GOLDEN_BOOST_DURATION_SEC,
+  GOLDEN_BOOST_MULTIPLIER,
+  GOLDEN_SPEED_BOOST_PCT,
+} from '../core/constants';
 import { PERCENT_C_UNLOCK } from '../core/content';
 import { distanceRate, generatorSpeed, speed } from '../core/logic';
 import { lastMilestone } from '../core/milestones';
@@ -54,9 +60,9 @@ export interface StageFrame {
    * heavily log-compressed overall speed level (see ParticleScene.update). */
   clickIntensity: number;
   ruler: RulerReading;
-  /** 0..1, goldenBoostActiveSec / GOLDEN_BOOST_DURATION_SEC — drives the
-   * scene's gold aura/spark effect on the main particle while a golden-catch
-   * click boost is active (see ParticleScene.update). */
+  /** 0..1, max remaining/total across all active golden effects — drives the
+   * scene's gold aura/spark effect on the main particle while any golden-catch
+   * effect is active (see ParticleScene.update). */
   goldenBoostFraction: number;
 }
 
@@ -92,12 +98,21 @@ export function updateStage(state: GameState, refs: UiRefs): StageFrame {
 
   const clickIntensity = state.clickRate / CLICK_RATE_CAP;
 
-  const goldenBoostFraction = Math.max(
-    0,
-    Math.min(1, state.goldenBoostActiveSec / GOLDEN_BOOST_DURATION_SEC),
-  );
-  refs.boostBanner.classList.toggle('is-hidden', goldenBoostFraction <= 0);
-  refs.boostBarFill.style.width = `${Math.round(goldenBoostFraction * 100)}%`;
+  const clickBoost = state.goldenEffects.click;
+  const clickFraction = Math.max(0, Math.min(1, clickBoost.secRemaining / GOLDEN_BOOST_DURATION_SEC));
+  refs.boostBannerClick.classList.toggle('is-hidden', clickFraction <= 0);
+  refs.boostBarFillClick.style.width = `${Math.round(clickFraction * 100)}%`;
+  refs.boostMultValue.textContent = `×${GOLDEN_BOOST_MULTIPLIER * clickBoost.stacks}`;
+
+  const speedBoost = state.goldenEffects.speed;
+  const speedFraction = Math.max(0, Math.min(1, speedBoost.secRemaining / GOLDEN_BOOST_DURATION_SEC));
+  refs.boostBannerSpeed.classList.toggle('is-hidden', speedFraction <= 0);
+  refs.boostBarFillSpeed.style.width = `${Math.round(speedFraction * 100)}%`;
+  refs.boostSpeedValue.textContent = `+${Math.round(GOLDEN_SPEED_BOOST_PCT * speedBoost.stacks * 100)}%`;
+
+  refs.boostBanner.classList.toggle('is-hidden', clickFraction <= 0 && speedFraction <= 0);
+
+  const goldenBoostFraction = Math.max(clickFraction, speedFraction);
 
   return {
     visualFraction: fraction,

@@ -16,8 +16,12 @@ export interface UiRefs {
   percentCValue: HTMLElement;
   speedBarFill: HTMLElement;
   boostBanner: HTMLElement;
+  boostBannerClick: HTMLElement;
   boostMultValue: HTMLElement;
-  boostBarFill: HTMLElement;
+  boostBarFillClick: HTMLElement;
+  boostBannerSpeed: HTMLElement;
+  boostSpeedValue: HTMLElement;
+  boostBarFillSpeed: HTMLElement;
   clickHint: HTMLElement;
   offlineOverlay: HTMLElement;
   offlineDuration: HTMLElement;
@@ -64,8 +68,12 @@ export function queryRefs(): UiRefs {
     percentCValue: req('percent-c-value'),
     speedBarFill: req('speed-bar-fill'),
     boostBanner: req('boost-banner'),
+    boostBannerClick: req('boost-banner-click'),
     boostMultValue: req('boost-mult-value'),
-    boostBarFill: req('boost-bar-fill'),
+    boostBarFillClick: req('boost-bar-fill-click'),
+    boostBannerSpeed: req('boost-banner-speed'),
+    boostSpeedValue: req('boost-speed-value'),
+    boostBarFillSpeed: req('boost-bar-fill-speed'),
     clickHint: req('click-hint'),
     offlineOverlay: req('offline-overlay'),
     offlineDuration: req('offline-duration'),
